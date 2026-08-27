@@ -1,0 +1,8 @@
+.env
+.git
+.phpunit.cache
+build
+coverage
+var/log
+var/tmp
+vendor

@@ -1,0 +1,101 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use App\ApplicationFactory;
+use App\Infrastructure\Database\ConnectionFactory;
+use App\Infrastructure\Database\Migrator;
+use App\Support\Config;
+use App\Support\Environment;
+use App\Support\JsonLogger;
+
+require \dirname(__DIR__) . '/vendor/autoload.php';
+
+$root = \dirname(__DIR__);
+Environment::load($root);
+$logger = new JsonLogger($root . '/var/log/application.log');
+
+try {
+    $config = Config::fromEnvironment();
+    $command = $argv[1] ?? 'help';
+    $connectionFactory = new ConnectionFactory($config);
+    $factory = new ApplicationFactory($config, $root);
+    $options = [];
+    foreach (\array_slice($argv, 2) as $argument) {
+        if (preg_match('/^--([a-z-]+)=(.+)$/', $argument, $matches) !== 1) {
+            throw new InvalidArgumentException(\sprintf('Invalid option: %s', $argument));
+        }
+        $options[$matches[1]] = $matches[2];
+    }
+
+    $result = match ($command) {
+        'migrate' => (new Migrator($connectionFactory->create(), $root . '/database/migrations'))->migrate(),
+        'import' => $factory->importService()->import(
+            $options['from'] ?? throw new InvalidArgumentException('Option --from is required.'),
+            $options['to'] ?? throw new InvalidArgumentException('Option --to is required.'),
+            $options['trigger'] ?? 'manual',
+        )->toArray(),
+        'import-yesterday' => (static function () use ($factory): array {
+            $yesterday = (new \DateTimeImmutable('now', new \DateTimeZone('Europe/Zurich')))
+                ->modify('-1 day')
+                ->format('Y-m-d');
+
+            return $factory->importService()->import($yesterday, $yesterday, 'cron')->toArray();
+        })(),
+        'ranking' => array_map(
+            static fn($entry): array => $entry->toArray(),
+            $factory->rankingService()->top(
+                (int) ($options['days'] ?? 30),
+                (int) ($options['limit'] ?? 50),
+            ),
+        ),
+        'sync' => $factory->playlistSyncService()->synchronize($options['trigger'] ?? 'manual')->toArray(),
+        'cleanup' => $factory->cleanupService()->cleanup((int) ($options['days'] ?? 90))->toArray(),
+        'match' => (static function () use ($factory, $options): array {
+            $songId = (int) ($options['song'] ?? throw new InvalidArgumentException('Option --song is required.'));
+            $track = $options['track'] ?? throw new InvalidArgumentException('Option --track is required.');
+            $match = $factory->matchingService()->selectManualTrack($songId, $track);
+
+            return ['song_id' => $match->songId, 'status' => $match->status, 'track_id' => $match->trackId];
+        })(),
+        'reject-match' => (static function () use ($factory, $options): array {
+            $songId = (int) ($options['song'] ?? throw new InvalidArgumentException('Option --song is required.'));
+            $match = $factory->matchingService()->reject($songId);
+
+            return ['song_id' => $match->songId, 'status' => $match->status];
+        })(),
+        'diagnostics' => [
+            'php_version' => PHP_VERSION,
+            'required_extensions' => array_map(
+                static fn(string $extension): bool => \extension_loaded($extension),
+                ['curl', 'intl', 'json', 'mbstring', 'openssl', 'pdo', 'pdo_mysql'],
+            ),
+            'database' => $connectionFactory->create()->query('SELECT 1')->fetchColumn() === 1,
+            'environment' => $config->string('APP_ENV'),
+        ],
+        'help' => ['commands' => [
+            'migrate',
+            'diagnostics',
+            'import',
+            'import-yesterday',
+            'ranking',
+            'sync',
+            'cleanup',
+            'match',
+            'reject-match',
+        ]],
+        default => throw new InvalidArgumentException(\sprintf('Unknown command: %s', $command)),
+    };
+
+    fwrite(STDOUT, json_encode($result, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT) . PHP_EOL);
+    exit(0);
+} catch (Throwable $exception) {
+    $logger->error('console.failed', [
+        'command' => $argv[1] ?? 'help',
+        'exception' => $exception::class,
+        'message' => $exception->getMessage(),
+    ]);
+    fwrite(STDERR, $exception->getMessage() . PHP_EOL);
+    exit($exception instanceof InvalidArgumentException ? 2 : 1);
+}

@@ -1,0 +1,60 @@
+services:
+  app:
+    build:
+      context: .
+    command: >-
+      sh -c "mkdir -p var/log var/tmp
+      && chown -R www-data:www-data var
+      && composer install --no-interaction
+      && apache2-foreground"
+    depends_on:
+      database:
+        condition: service_healthy
+    environment:
+      APP_ENV: development
+      APP_KEY: ${APP_KEY:-local-development-key-change-before-production}
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      DB_HOST: database
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-srf3spotify}
+      DB_USER: ${DB_USER:-srf3spotify}
+      DB_PASSWORD: ${DB_PASSWORD:-local-password}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+      CRON_TOKEN: ${CRON_TOKEN:-}
+      SRF_BASE_URL: ${SRF_BASE_URL:-https://il.srf.ch/integrationlayer/2.0/srf/songList/radio/byChannel}
+      SRF_CHANNEL_ID: ${SRF_CHANNEL_ID:-dd0fa1ba-4ff6-4e1a-ab74-d7e49057d96f}
+      SRF_PAGE_SIZE: ${SRF_PAGE_SIZE:-500}
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID:-}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET:-}
+    ports:
+      - "127.0.0.1:${APP_PORT:-8080}:80"
+    volumes:
+      - .:/var/www/html
+      - composer-cache:/tmp/composer-cache
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  database:
+    image: mariadb:11.4
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-srf3spotify}
+      MARIADB_USER: ${DB_USER:-srf3spotify}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-local-password}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-local-root-password}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${DB_FORWARD_PORT:-3307}:3306"
+    volumes:
+      - database-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  composer-cache:
+  database-data:

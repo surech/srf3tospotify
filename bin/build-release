@@ -1,0 +1,33 @@
+#!/usr/bin/env sh
+
+set -eu
+
+project_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+build_dir="$project_root/build"
+release_dir="$build_dir/release"
+archive="$build_dir/srf3tospotify-release.tar.gz"
+
+rm -rf "$release_dir"
+rm -f "$archive" "$archive.sha256"
+mkdir -p "$release_dir/var/log" "$release_dir/var/tmp"
+
+for path in bin composer.json composer.lock database public src templates; do
+    cp -R "$project_root/$path" "$release_dir/"
+done
+cp "$project_root/.env.example" "$project_root/.htaccess" "$project_root/README.md" "$project_root/DEPLOYMENT.md" "$release_dir/"
+
+composer install \
+    --working-dir="$release_dir" \
+    --no-dev \
+    --no-interaction \
+    --no-scripts \
+    --prefer-dist \
+    --classmap-authoritative
+
+tar -czf "$archive" -C "$release_dir" .
+(
+    cd "$build_dir"
+    sha256sum "$(basename "$archive")" > "$(basename "$archive").sha256"
+)
+
+printf 'Release directory: %s\nArchive: %s\nChecksum: %s\n' "$release_dir" "$archive" "$archive.sha256"
