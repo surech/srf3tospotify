@@ -1,5 +1,6 @@
 DirectoryIndex index.php
 Options -Indexes
+Require all granted
 SetEnvIf Authorization "(.+)" HTTP_AUTHORIZATION=$1
 
 <IfModule mod_rewrite.c>
