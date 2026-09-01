@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Web;
 
 use App\Application\Import\ImportLocked;
+use App\Infrastructure\Spotify\SpotifyNotAuthorized;
 use App\Infrastructure\Spotify\SpotifyRateLimited;
 use App\Web\CsrfGuard;
 use App\Web\OAuthState;
@@ -103,6 +104,27 @@ final class WebApplicationTest extends TestCase
 
         self::assertSame(200, $authorized->status);
         self::assertSame(['http-cron'], $this->operations->synchronizations);
+    }
+
+    public function testSyncWithoutSpotifyAuthorizationRedirectsToOAuth(): void
+    {
+        $this->login();
+        $this->operations->synchronizeException = new SpotifyNotAuthorized('Spotify authorization is required.');
+
+        $response = $this->application->handle(new Request('POST', '/actions/sync', form: [
+            '_csrf' => $this->csrf->token(),
+        ]));
+
+        self::assertSame(303, $response->status);
+        self::assertSame('/spotify/authorize', $response->headers['Location']);
+
+        $internal = $this->application->handle(new Request(
+            'POST',
+            '/internal/cron/sync',
+            headers: ['authorization' => 'Bearer cron-secret'],
+        ));
+        self::assertSame(409, $internal->status);
+        self::assertStringContainsString('SPOTIFY_NOT_AUTHORIZED', $internal->body);
     }
 
     public function testOAuthCallbackValidatesOneTimeState(): void

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Web;
 
 use App\Application\Import\ImportLocked;
+use App\Infrastructure\Spotify\SpotifyNotAuthorized;
 use App\Infrastructure\Spotify\SpotifyRateLimited;
 use App\Support\Uuid;
 use InvalidArgumentException;
@@ -33,6 +34,12 @@ final readonly class WebApplication
             return $this->error($request, 422, 'VALIDATION_FAILED', $exception->getMessage());
         } catch (ImportLocked $exception) {
             return $this->error($request, 409, 'OPERATION_LOCKED', $exception->getMessage());
+        } catch (SpotifyNotAuthorized $exception) {
+            if (str_starts_with($request->path, '/internal/')) {
+                return $this->error($request, 409, 'SPOTIFY_NOT_AUTHORIZED', $exception->getMessage());
+            }
+
+            return Response::redirect('/spotify/authorize');
         } catch (SpotifyRateLimited $exception) {
             return $this->error(
                 $request,
