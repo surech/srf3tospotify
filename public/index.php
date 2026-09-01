@@ -19,14 +19,25 @@ use App\Web\WebApplication;
 require \dirname(__DIR__) . '/vendor/autoload.php';
 
 $request = Request::fromGlobals();
-if ($request->method === 'GET' && $request->path === '/health') {
-    Response::json(['status' => 'ok'])->send();
-}
-
 $root = \dirname(__DIR__);
 try {
+    $adminPasswordHashPreloaded = getenv('ADMIN_PASSWORD_HASH') !== false;
     Environment::load($root);
     $config = Config::fromEnvironment();
+    if ($request->method === 'GET' && $request->path === '/health') {
+        $adminPasswordHash = $config->string('ADMIN_PASSWORD_HASH');
+        Response::json([
+            'status' => 'ok',
+            'admin_password_hash' => [
+                'source' => $adminPasswordHashPreloaded ? 'process_environment' : '.env',
+                'length' => \strlen($adminPasswordHash),
+                'algorithm' => password_get_info($adminPasswordHash)['algoName'],
+                'prefix' => substr($adminPasswordHash, 0, 7),
+                'suffix' => substr($adminPasswordHash, -6),
+                'sha256' => hash('sha256', $adminPasswordHash),
+            ],
+        ])->send();
+    }
     $factory = new ApplicationFactory($config, $root);
     $session = new NativeSessionStore(str_starts_with($config->required('APP_URL'), 'https://'));
     $operations = new DefaultWebOperations(

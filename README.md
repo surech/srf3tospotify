@@ -19,7 +19,7 @@ Die lokale `.env` bleibt durch `.gitignore` ausgeschlossen. Passwort-Hash erzeug
 docker compose run --rm app php -r 'echo password_hash("mein-passwort", PASSWORD_DEFAULT), PHP_EOL;'
 ```
 
-Hash als einfach quotierten Wert `ADMIN_PASSWORD_HASH='...'` in `.env` eintragen; Container danach neu erstellen:
+Hash als einfach quotierten Wert `ADMIN_PASSWORD_HASH='...'` in `.env` eintragen. Die Anwendung entfernt die äusseren Anführungszeichen beim Laden; sie gehören nicht zum Hash. Container danach neu erstellen:
 
 ```bash
 docker compose up -d --force-recreate --wait

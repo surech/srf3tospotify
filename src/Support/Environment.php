@@ -29,9 +29,18 @@ final class Environment
                 continue;
             }
 
-            $stringValue = (string) $value;
+            $stringValue = self::unquote((string) $value);
             putenv($key . '=' . $stringValue);
             $_ENV[$key] = $stringValue;
         }
+    }
+
+    private static function unquote(string $value): string
+    {
+        if (\strlen($value) >= 2 && $value[0] === "'" && $value[-1] === "'") {
+            return substr($value, 1, -1);
+        }
+
+        return $value;
     }
 }
