@@ -56,7 +56,7 @@ Pflichtwerte:
 
 CLI und Webserver müssen auf Shared Hosting unter demselben Account laufen oder gemeinsame Schreibrechte auf `var/log/` und `var/tmp/` besitzen. Lokale Docker-CLI-Beispiele verwenden deshalb `--user www-data`.
 
-Dollarzeichen in Passwort-Hashes bei Docker Compose einfach quotieren: `ADMIN_PASSWORD_HASH='$2y$...'`.
+Dollarzeichen in Passwort-Hashes bei Docker Compose einfach quotieren: `ADMIN_PASSWORD_HASH='$2y$...'`. Die Anwendung entfernt die äusseren einfachen Anführungszeichen beim Laden; der geladene bcrypt-Hash bleibt 60 Zeichen lang.
 
 ## 5. Datenbank migrieren
 
@@ -83,6 +83,8 @@ Erwartung: JSON mit `applied` und `skipped`. Token niemals als Query-Parameter v
 ```bash
 curl --fail https://DEINE-DOMAIN/health
 ```
+
+Erwartete Passwort-Hash-Diagnose: `length` ist `60`, `algorithm` ist `bcrypt` und `prefix` ist `$2y$10$`. Der vollständige Hash wird nicht ausgegeben.
 
 Danach Dashboard anmelden, einen vergangenen Tag importieren, denselben Tag erneut importieren und prüfen: zweiter Lauf `0` neue Datensätze.
 

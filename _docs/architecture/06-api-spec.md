@@ -25,7 +25,9 @@ The web surface is a server-rendered owner dashboard. JSON responses are used fo
 | `POST` | `/internal/cron/import` | Bearer token | Import previous complete Europe/Zurich day |
 | `POST` | `/internal/cron/sync` | Bearer token | Synchronize configured ranking |
 | `POST` | `/internal/maintenance/migrate` | Bearer token | Apply pending idempotent database migrations after FTP deployment |
-| `GET` | `/health` | Public | `200 {"status":"ok"}` without DB or secret details |
+| `GET` | `/health` | Public | `200` with status and non-reversible diagnostics for the loaded admin password hash; never returns the full hash |
+
+The password-hash diagnostics contain the configuration source, length, algorithm, prefix, suffix and SHA-256 fingerprint. A valid bcrypt value has length `60`, algorithm `bcrypt` and prefix `$2y$10$`.
 
 ## Action Response
 
