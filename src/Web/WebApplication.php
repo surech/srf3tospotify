@@ -6,6 +6,7 @@ namespace App\Web;
 
 use App\Application\Import\ImportLocked;
 use App\Infrastructure\Spotify\SpotifyRateLimited;
+use App\Support\Uuid;
 use InvalidArgumentException;
 use Throwable;
 
@@ -41,9 +42,28 @@ final readonly class WebApplication
                 ['Retry-After' => (string) $exception->retryAfterSeconds],
             );
         } catch (Throwable $exception) {
-            error_log(\sprintf('%s: %s', $exception::class, $exception->getMessage()));
+            $errorId = Uuid::v4();
+            error_log(\sprintf(
+                '[%s] %s %s - %s: %s',
+                $errorId,
+                $request->method,
+                $request->path,
+                $exception::class,
+                $exception->getMessage(),
+            ));
 
-            return $this->error($request, 500, 'OPERATION_FAILED', 'Aktion konnte nicht abgeschlossen werden.');
+            return $this->error(
+                $request,
+                500,
+                'OPERATION_FAILED',
+                'Aktion konnte nicht abgeschlossen werden.',
+                technicalDetails: [
+                    'error_id' => $errorId,
+                    'request' => $request->method . ' ' . $request->path,
+                    'exception' => $exception::class,
+                    'message' => $exception->getMessage(),
+                ],
+            );
         }
     }
 
@@ -185,16 +205,29 @@ final readonly class WebApplication
         }
     }
 
-    /** @param array<string, string> $headers */
-    private function error(Request $request, int $status, string $code, string $message, array $headers = []): Response
-    {
+    /** @param array<string, string> $headers
+     *  @param array{error_id: string, request: string, exception: class-string<Throwable>, message: string}|null $technicalDetails
+     */
+    private function error(
+        Request $request,
+        int $status,
+        string $code,
+        string $message,
+        array $headers = [],
+        ?array $technicalDetails = null,
+    ): Response {
         if (str_starts_with($request->path, '/internal/')) {
             return Response::json(['status' => 'failed', 'error' => ['code' => $code, 'message' => $message]], $status, $headers);
         }
 
         return new Response(
             $status,
-            $this->renderer->render('error', ['status' => $status, 'message' => $message]),
+            $this->renderer->render('error', [
+                'status' => $status,
+                'code' => $code,
+                'message' => $message,
+                'technicalDetails' => $technicalDetails,
+            ]),
             array_merge(['Content-Type' => 'text/html; charset=utf-8'], $headers),
         );
     }
