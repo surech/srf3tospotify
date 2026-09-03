@@ -27,6 +27,9 @@ final class FakeWebOperations implements WebOperations
     /** @var list<int> */
     public array $rejectedMatches = [];
 
+    /** @var list<array<string, mixed>> */
+    public array $ranking = [];
+
     public int $migrations = 0;
 
     public ?Throwable $dashboardException = null;
@@ -41,7 +44,7 @@ final class FakeWebOperations implements WebOperations
 
         return [
             'statistics' => ['plays' => 0, 'songs' => 0, 'unresolved' => 0, 'last_import' => null, 'last_sync' => null],
-            'ranking' => [],
+            'ranking' => $this->ranking,
             'unresolved_matches' => [],
             'recent_imports' => [],
             'recent_syncs' => [],

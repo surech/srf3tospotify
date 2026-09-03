@@ -82,15 +82,25 @@ final class ImportAndRankingTest extends TestCase
         self::assertSame(3, $record['context']['counts']['duplicates']);
         self::assertIsInt($record['context']['duration_ms']);
 
-        $ranking = (new RankingService(
+        $rankingService = new RankingService(
             new RankingRepository($this->connection),
             new DateTimeZone('Europe/Zurich'),
-        ))->top(2, 50, $now);
+        );
+        $ranking = $rankingService->top(2, 50, $now);
 
         self::assertCount(2, $ranking);
         self::assertSame('Song A', $ranking[0]->title);
         self::assertSame(2, $ranking[0]->playCount);
         self::assertSame('Song B', $ranking[1]->title);
+
+        $rankingWithPlayTimes = $rankingService->topWithPlayTimes(2, 50, $now);
+        self::assertSame(
+            ['2020-01-01T12:00:00+01:00', '2020-01-01T11:00:00+01:00'],
+            array_map(
+                static fn(DateTimeImmutable $playedAt): string => $playedAt->format(DATE_ATOM),
+                $rankingWithPlayTimes[0]['play_times'],
+            ),
+        );
     }
 
     public function testRankingFiltersWeekdayMorningAcrossSwissDaylightSavingChange(): void
@@ -100,7 +110,7 @@ final class ImportAndRankingTest extends TestCase
             $this->play('2020-03-30T07:59:59Z', 'Artist A', 'Morning Leader', 120),
             $this->play('2020-03-30T04:30:00Z', 'Artist B', 'Morning Runner', 120),
             $this->play('2020-03-23T04:59:59Z', 'Artist C', 'Too Early', 60),
-            $this->play('2020-03-27T09:00:00Z', 'Artist D', 'Too Late', 60),
+            $this->play('2020-03-27T09:00:00Z', 'Artist A', 'Morning Leader', 60),
             $this->play('2020-03-28T05:30:00Z', 'Artist E', 'Weekend', 60),
         ];
         $service = new ImportService(
@@ -114,16 +124,27 @@ final class ImportAndRankingTest extends TestCase
         $now = new DateTimeImmutable('2020-03-31T12:00:00+02:00');
         $service->import('2020-03-23', '2020-03-30', 'manual', $now);
 
-        $ranking = (new RankingService(
+        $rankingService = new RankingService(
             new RankingRepository($this->connection),
             new DateTimeZone('Europe/Zurich'),
-        ))->top(8, 50, $now, new RankingFilter(true, 360, 600));
+        );
+        $filter = new RankingFilter(true, 360, 600);
+        $ranking = $rankingService->top(8, 50, $now, $filter);
 
         self::assertCount(2, $ranking);
         self::assertSame('Morning Leader', $ranking[0]->title);
         self::assertSame(2, $ranking[0]->playCount);
         self::assertSame('Morning Runner', $ranking[1]->title);
         self::assertSame(1, $ranking[1]->playCount);
+
+        $rankingWithPlayTimes = $rankingService->topWithPlayTimes(8, 50, $now, $filter);
+        self::assertSame(
+            ['2020-03-30T09:59:59+02:00', '2020-03-23T06:00:00+01:00'],
+            array_map(
+                static fn(DateTimeImmutable $playedAt): string => $playedAt->format(DATE_ATOM),
+                $rankingWithPlayTimes[0]['play_times'],
+            ),
+        );
     }
 
     private function play(string $date, string $artist, string $title, int $sourceOffsetMinutes = 60): RadioPlay

@@ -6,6 +6,7 @@ namespace App\Web;
 
 use App\ApplicationFactory;
 use App\Infrastructure\Database\DashboardRepository;
+use DateTimeImmutable;
 
 final readonly class DefaultWebOperations implements WebOperations
 {
@@ -19,8 +20,16 @@ final readonly class DefaultWebOperations implements WebOperations
         return [
             'statistics' => $this->dashboardRepository->statistics(),
             'ranking' => array_map(
-                static fn($entry): array => $entry->toArray(),
-                $this->factory->rankingService()->top(30, 50),
+                static fn(array $ranking): array => $ranking['entry']->toArray() + [
+                    'play_times' => array_map(
+                        static fn(DateTimeImmutable $playedAt): array => [
+                            'datetime' => $playedAt->format(DATE_ATOM),
+                            'label' => $playedAt->format('d.m.Y, H:i'),
+                        ],
+                        $ranking['play_times'],
+                    ),
+                ],
+                $this->factory->rankingService()->topWithPlayTimes(30, 50),
             ),
             'unresolved_matches' => $this->dashboardRepository->unresolvedMatches(),
             'recent_imports' => $this->dashboardRepository->recentImports(),

@@ -12,6 +12,7 @@ $recentSyncs = is_array($recent_syncs ?? null) ? $recent_syncs : [];
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Übersicht · SRF3ToSpotify</title>
   <link rel="stylesheet" href="/assets/app.css">
+  <script src="/assets/app.js" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -81,11 +82,21 @@ $recentSyncs = is_array($recent_syncs ?? null) ? $recent_syncs : [];
             <thead><tr><th>#</th><th>Song</th><th>Künstler</th><th>Spiele</th><th>Spotify</th></tr></thead>
             <tbody>
             <?php foreach ($ranking as $index => $entry): ?>
+              <?php $dialogId = 'play-history-' . (int) ($entry['song_id'] ?? $index); ?>
               <tr>
                 <td class="rank"><?= $escape($index + 1) ?></td>
                 <td class="song-title"><?= $escape($entry['title'] ?? '') ?></td>
                 <td><?= $escape($entry['artist'] ?? '') ?></td>
-                <td><?= $escape($entry['play_count'] ?? 0) ?></td>
+                <td class="play-count-cell">
+                  <button
+                    type="button"
+                    class="play-count-button"
+                    data-dialog-target="<?= $escape($dialogId) ?>"
+                    aria-haspopup="dialog"
+                    aria-controls="<?= $escape($dialogId) ?>"
+                    aria-label="<?= $escape(($entry['play_count'] ?? 0) . ' Spiele: Spielzeiten für ' . ($entry['title'] ?? '') . ' anzeigen') ?>"
+                  ><?= $escape($entry['play_count'] ?? 0) ?></button>
+                </td>
                 <td><span class="status status-<?= $escape($entry['match_status'] ?? 'pending') ?>"><?= $escape($entry['match_status'] ?? 'pending') ?></span></td>
               </tr>
             <?php endforeach; ?>
@@ -95,6 +106,41 @@ $recentSyncs = is_array($recent_syncs ?? null) ? $recent_syncs : [];
             </tbody>
           </table>
         </div>
+
+        <?php foreach ($ranking as $index => $entry): ?>
+          <?php
+          $dialogId = 'play-history-' . (int) ($entry['song_id'] ?? $index);
+          $playTimes = is_array($entry['play_times'] ?? null) ? $entry['play_times'] : [];
+          $playCount = (int) ($entry['play_count'] ?? 0);
+          $playCountLabel = $playCount === 1 ? '1 Ausstrahlung' : $playCount . ' Ausstrahlungen';
+          ?>
+          <dialog class="play-history-dialog" id="<?= $escape($dialogId) ?>" aria-labelledby="<?= $escape($dialogId) ?>-title">
+            <div class="dialog-heading">
+              <div>
+                <p class="eyebrow">Spielzeiten</p>
+                <h3 id="<?= $escape($dialogId) ?>-title"><?= $escape($playCountLabel) ?></h3>
+              </div>
+              <form method="dialog">
+                <button type="submit" class="dialog-close" aria-label="Schliessen" title="Schliessen">&times;</button>
+              </form>
+            </div>
+            <p class="dialog-song">
+              <strong><?= $escape($entry['title'] ?? '') ?></strong>
+              <span><?= $escape($entry['artist'] ?? '') ?></span>
+            </p>
+            <?php if ($playTimes !== []): ?>
+              <ol class="play-time-list">
+                <?php foreach ($playTimes as $playTime): ?>
+                  <?php if (is_array($playTime)): ?>
+                    <li><time datetime="<?= $escape($playTime['datetime'] ?? '') ?>"><?= $escape($playTime['label'] ?? '') ?> Uhr</time></li>
+                  <?php endif; ?>
+                <?php endforeach; ?>
+              </ol>
+            <?php else: ?>
+              <p class="empty-state">Keine Spielzeiten verfügbar.</p>
+            <?php endif; ?>
+          </dialog>
+        <?php endforeach; ?>
       </section>
 
       <section aria-labelledby="matches-title">

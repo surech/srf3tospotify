@@ -211,6 +211,33 @@ final class WebApplicationTest extends TestCase
         self::assertTrue($this->session->destroyed);
     }
 
+    public function testDashboardRendersPlayHistoryDialog(): void
+    {
+        $this->operations->ranking = [[
+            'song_id' => 42,
+            'title' => 'Test <Song>',
+            'artist' => 'Artist & Co.',
+            'play_count' => 2,
+            'match_status' => 'accepted',
+            'play_times' => [
+                ['datetime' => '2026-08-01T12:34:00+02:00', 'label' => '01.08.2026, 12:34'],
+                ['datetime' => '2026-07-31T08:15:00+02:00', 'label' => '31.07.2026, 08:15'],
+            ],
+        ]];
+        $this->login();
+
+        $dashboard = $this->application->handle(new Request('GET', '/'));
+
+        self::assertSame(200, $dashboard->status);
+        self::assertStringContainsString('data-dialog-target="play-history-42"', $dashboard->body);
+        self::assertStringContainsString('id="play-history-42"', $dashboard->body);
+        self::assertStringContainsString('Test &lt;Song&gt;', $dashboard->body);
+        self::assertStringContainsString(
+            '<time datetime="2026-08-01T12:34:00+02:00">01.08.2026, 12:34 Uhr</time>',
+            $dashboard->body,
+        );
+    }
+
     public function testFailedLoginHealthAndUnknownRoute(): void
     {
         $failed = $this->application->handle(new Request('POST', '/login', form: [
