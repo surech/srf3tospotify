@@ -13,6 +13,9 @@
 ## Ranking Rules
 
 - Window: last `ranking_days` complete Europe/Zurich calendar days; default under A-003 is 30.
+- Optional playlist policy: include weekdays only and constrain local play start time to an inclusive/exclusive minute range.
+- `SRF 3 - Der Morgen`: Monday through Friday, local minute `360` (06:00) inclusive through `600` (10:00) exclusive.
+- Reconstruct each play's Swiss local weekday and time from UTC timestamp plus stored source offset, including daylight-saving changes.
 - Group by logical `song.id`, not raw title spelling from individual plays.
 - Sort by play count descending, latest play descending, normalized artist ascending, normalized title ascending.
 - Return at most `max_tracks`; default under A-003 is 50.
@@ -30,11 +33,13 @@
 ## Playlist Synchronization
 
 - Acquire a MariaDB advisory lock before calculating the desired playlist.
+- Load every configured playlist and calculate its ranking policy independently within the same locked synchronization.
 - Persist the ordered desired snapshot before calling Spotify.
-- Create the configured playlist once through `POST /v1/me/playlists` when no playlist ID exists.
+- Create each configured playlist once through `POST /v1/me/playlists` when no playlist ID exists.
 - Replace items through the current `/v1/playlists/{playlist_id}/items` contract. Replace the first batch and append subsequent batches of at most 100.
 - Never modify a playlist not owned by the authorized Spotify account.
 - On failure, retain the desired snapshot and previous successful run metadata for retry and diagnosis.
+- Attempt every configured playlist even if another target fails; report the overall call as failed after all attempts.
 - Repeating synchronization with the same ranking yields the same URI sequence.
 
 ## Import Sequence
@@ -68,21 +73,25 @@ sequenceDiagram
     participant DB as MariaDB
     participant Spotify as Spotify API
     Trigger->>App: synchronize
-    App->>DB: acquire lock and load ranking
-    loop unresolved ranked songs
-        App->>Spotify: search track
-        Spotify-->>App: up to 10 candidates
-        App->>DB: persist accepted/review match
+    App->>DB: acquire lock and load playlist configurations
+    loop configured playlists
+        App->>DB: calculate policy-specific ranking
+        loop unresolved ranked songs
+            App->>Spotify: search track
+            Spotify-->>App: up to 10 candidates
+            App->>DB: persist accepted/review match
+        end
+        App->>DB: persist ordered desired snapshot
+        App->>Spotify: refresh access token if required
+        App->>Spotify: replace first item batch
+        opt more than 100 tracks
+            App->>Spotify: append remaining batches
+        end
+        Spotify-->>App: snapshot ID
+        App->>DB: mark playlist sync succeeded
     end
-    App->>DB: persist ordered desired snapshot
-    App->>Spotify: refresh access token if required
-    App->>Spotify: replace first item batch
-    opt more than 100 tracks
-        App->>Spotify: append remaining batches
-    end
-    Spotify-->>App: snapshot ID
-    App->>DB: mark sync succeeded and release lock
-    App-->>Trigger: result and unresolved count
+    App->>DB: release lock
+    App-->>Trigger: aggregate result and unresolved count
 ```
 
 ## Failure and Retry Rules

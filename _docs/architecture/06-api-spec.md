@@ -18,12 +18,12 @@ The web surface is a server-rendered owner dashboard. JSON responses are used fo
 | `POST` | `/logout` | Session + CSRF | Destroy owner session |
 | `GET` | `/` | Session | Status, recent runs, ranking and unresolved matches |
 | `POST` | `/actions/import` | Session + CSRF | Body: `from_date`, `to_date`; synchronous import result |
-| `POST` | `/actions/sync` | Session + CSRF | Build and synchronize current ranking |
+| `POST` | `/actions/sync` | Session + CSRF | Build and synchronize all configured playlist rankings |
 | `POST` | `/matches/{songId}` | Session + CSRF | Body: Spotify track URL/ID or `rejected`; save manual override |
 | `GET` | `/spotify/authorize` | Session | Redirect to Spotify Authorization Code Flow |
 | `GET` | `/spotify/callback` | Session + OAuth state | Exchange code and store encrypted tokens |
 | `POST` | `/internal/cron/import` | Bearer token | Import previous complete Europe/Zurich day |
-| `POST` | `/internal/cron/sync` | Bearer token | Synchronize configured ranking |
+| `POST` | `/internal/cron/sync` | Bearer token | Synchronize all configured playlist rankings |
 | `POST` | `/internal/maintenance/migrate` | Bearer token | Apply pending idempotent database migrations after FTP deployment |
 | `GET` | `/health` | Public | `200` with status and non-reversible diagnostics for the loaded admin password hash; never returns the full hash |
 
@@ -53,6 +53,42 @@ The password-hash diagnostics contain the configuration source, length, algorith
     "code": "UPSTREAM_SCHEMA_INVALID",
     "message": "SRF returned an unsupported response."
   }
+}
+```
+
+## Synchronization Response
+
+Top-level playlist identifiers and counts refer to the first configured playlist for compatibility. `total_*` counts aggregate all synchronized playlists; `playlists` contains each individual result.
+
+```json
+{
+  "status": "succeeded",
+  "correlation_id": "0198e7d8-4f23-7b42-a5d2-7a64dd91f790",
+  "playlist_id": "spotify-top-50",
+  "snapshot_id": "snapshot-top-50",
+  "playlist_count": 2,
+  "track_count": 50,
+  "unresolved_count": 0,
+  "total_track_count": 100,
+  "total_unresolved_count": 0,
+  "playlists": [
+    {
+      "name": "SRF 3 - Top 50",
+      "correlation_id": "0198e7d8-4f23-7b42-a5d2-7a64dd91f790",
+      "playlist_id": "spotify-top-50",
+      "snapshot_id": "snapshot-top-50",
+      "track_count": 50,
+      "unresolved_count": 0
+    },
+    {
+      "name": "SRF 3 - Der Morgen",
+      "correlation_id": "0198e7d8-4f23-7b42-a5d2-7a64dd91f791",
+      "playlist_id": "spotify-morning",
+      "snapshot_id": "snapshot-morning",
+      "track_count": 50,
+      "unresolved_count": 0
+    }
+  ]
 }
 ```
 

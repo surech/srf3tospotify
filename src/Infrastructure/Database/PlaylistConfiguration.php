@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Infrastructure\Database;
 
+use App\Application\Ranking\RankingFilter;
+
 final readonly class PlaylistConfiguration
 {
     public function __construct(
@@ -14,6 +16,7 @@ final readonly class PlaylistConfiguration
         public string $description,
         public int $rankingDays,
         public int $maxTracks,
+        public RankingFilter $rankingFilter,
         public bool $public,
     ) {}
 }

@@ -65,7 +65,13 @@ final class FakeWebOperations implements WebOperations
         }
         $this->synchronizations[] = $trigger;
 
-        return ['track_count' => 2, 'unresolved_count' => 0];
+        return [
+            'playlist_count' => 2,
+            'track_count' => 3,
+            'unresolved_count' => 0,
+            'total_track_count' => 4,
+            'total_unresolved_count' => 0,
+        ];
     }
 
     public function migrate(): array

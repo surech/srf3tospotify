@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration;
 
 use App\Application\Import\ImportService;
+use App\Application\Ranking\RankingFilter;
 use App\Application\Ranking\RankingService;
 use App\Domain\RadioPlay;
 use App\Infrastructure\Database\AdvisoryLock;
@@ -92,11 +93,44 @@ final class ImportAndRankingTest extends TestCase
         self::assertSame('Song B', $ranking[1]->title);
     }
 
-    private function play(string $date, string $artist, string $title): RadioPlay
+    public function testRankingFiltersWeekdayMorningAcrossSwissDaylightSavingChange(): void
+    {
+        $plays = [
+            $this->play('2020-03-23T05:00:00Z', 'Artist A', 'Morning Leader', 60),
+            $this->play('2020-03-30T07:59:59Z', 'Artist A', 'Morning Leader', 120),
+            $this->play('2020-03-30T04:30:00Z', 'Artist B', 'Morning Runner', 120),
+            $this->play('2020-03-23T04:59:59Z', 'Artist C', 'Too Early', 60),
+            $this->play('2020-03-27T09:00:00Z', 'Artist D', 'Too Late', 60),
+            $this->play('2020-03-28T05:30:00Z', 'Artist E', 'Weekend', 60),
+        ];
+        $service = new ImportService(
+            new StaticSrfSource($plays),
+            new ImportRepository($this->connection),
+            new AdvisoryLock($this->connection),
+            new JsonLogger($this->logPath),
+            self::CHANNEL_ID,
+            new DateTimeZone('Europe/Zurich'),
+        );
+        $now = new DateTimeImmutable('2020-03-31T12:00:00+02:00');
+        $service->import('2020-03-23', '2020-03-30', 'manual', $now);
+
+        $ranking = (new RankingService(
+            new RankingRepository($this->connection),
+            new DateTimeZone('Europe/Zurich'),
+        ))->top(8, 50, $now, new RankingFilter(true, 360, 600));
+
+        self::assertCount(2, $ranking);
+        self::assertSame('Morning Leader', $ranking[0]->title);
+        self::assertSame(2, $ranking[0]->playCount);
+        self::assertSame('Morning Runner', $ranking[1]->title);
+        self::assertSame(1, $ranking[1]->playCount);
+    }
+
+    private function play(string $date, string $artist, string $title, int $sourceOffsetMinutes = 60): RadioPlay
     {
         return new RadioPlay(
             new DateTimeImmutable($date, new DateTimeZone('UTC')),
-            60,
+            $sourceOffsetMinutes,
             180_000,
             $artist,
             $title,
@@ -107,7 +141,9 @@ final class ImportAndRankingTest extends TestCase
     private function cleanup(): void
     {
         $this->connection->exec("DELETE FROM plays WHERE played_at_utc >= '2020-01-01' AND played_at_utc < '2020-01-03'");
+        $this->connection->exec("DELETE FROM plays WHERE played_at_utc >= '2020-03-22' AND played_at_utc < '2020-04-01'");
         $this->connection->exec("DELETE FROM import_runs WHERE range_from_utc >= '2019-12-31' AND range_from_utc < '2020-01-03'");
+        $this->connection->exec("DELETE FROM import_runs WHERE range_from_utc >= '2020-03-22' AND range_from_utc < '2020-04-01'");
         $this->connection->exec('DELETE FROM songs WHERE NOT EXISTS (SELECT 1 FROM plays WHERE plays.song_id = songs.id)');
     }
 }
