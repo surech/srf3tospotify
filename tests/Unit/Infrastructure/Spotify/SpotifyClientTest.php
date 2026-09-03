@@ -88,6 +88,21 @@ final class SpotifyClientTest extends TestCase
         self::assertFalse($client->playlistExists('playlist-id'));
     }
 
+    public function testUpdatesPlaylistVisibility(): void
+    {
+        $http = new QueueHttpClient([new HttpResponse(200, [], '')]);
+        $client = new SpotifyClient($http, new StaticAccessTokenProvider());
+
+        $client->updatePlaylistVisibility('playlist/id', true);
+
+        self::assertSame('PUT', $http->requests[0]['method']);
+        self::assertSame('https://api.spotify.com/v1/playlists/playlist%2Fid', $http->requests[0]['url']);
+        self::assertSame(
+            ['public' => true],
+            json_decode((string) $http->requests[0]['body'], true, 512, JSON_THROW_ON_ERROR),
+        );
+    }
+
     public function testUploadsBase64EncodedPlaylistCoverImage(): void
     {
         $http = new QueueHttpClient([new HttpResponse(202, [], '')]);

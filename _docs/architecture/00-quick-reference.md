@@ -33,7 +33,7 @@
 
 - **A-001:** Production supports PHP 8.2 or newer with cURL, GD, JSON, mbstring, OpenSSL, PDO and PDO MySQL.
 - **A-002:** Production permits outbound HTTPS to SRF and Spotify.
-- **A-003:** Initial playlist policy is top 50 unique songs from the last 30 complete Europe/Zurich calendar days, private playlist, count descending with most recent play as tie-breaker.
+- **A-003:** Initial playlist policy is top 50 unique songs from the last 30 complete Europe/Zurich calendar days, public playlist, count descending with most recent play as tie-breaker.
 - **A-004:** Single-owner administration is sufficient; no user registration or multi-tenancy.
 
 ## Open Gaps

@@ -38,5 +38,19 @@ final class MigratorTest extends TestCase
         }
         $tables = $statement->fetchAll(PDO::FETCH_COLUMN);
         self::assertSame(['plays'], $tables);
+
+        $privatePlaylists = $this->connection->query('SELECT COUNT(*) FROM playlists WHERE is_public = 0');
+        if ($privatePlaylists === false) {
+            self::fail('Unable to inspect playlist visibility.');
+        }
+        self::assertSame(0, (int) $privatePlaylists->fetchColumn());
+
+        $columnStatement = $this->connection->query("SHOW COLUMNS FROM playlists LIKE 'is_public'");
+        if ($columnStatement === false) {
+            self::fail('Unable to inspect playlist visibility default.');
+        }
+        $column = $columnStatement->fetch(PDO::FETCH_ASSOC);
+        self::assertIsArray($column);
+        self::assertSame('1', $column['Default']);
     }
 }

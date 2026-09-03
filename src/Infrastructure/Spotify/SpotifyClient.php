@@ -101,6 +101,25 @@ final readonly class SpotifyClient implements SpotifyGateway
         return false;
     }
 
+    public function updatePlaylistVisibility(string $playlistId, bool $public): void
+    {
+        if ($playlistId === '') {
+            throw new SpotifyException('Spotify playlist ID is required.');
+        }
+
+        $response = $this->httpClient->request(
+            'PUT',
+            self::API_URL . '/playlists/' . rawurlencode($playlistId),
+            [
+                'Authorization' => 'Bearer ' . $this->tokenProvider->accessToken(),
+                'Accept' => 'application/json',
+                'Content-Type' => 'application/json',
+            ],
+            json_encode(['public' => $public], JSON_THROW_ON_ERROR),
+        );
+        $this->assertStatus($response, [200]);
+    }
+
     public function uploadPlaylistCoverImage(string $playlistId, string $jpeg): void
     {
         if ($playlistId === '') {

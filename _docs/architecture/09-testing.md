@@ -9,7 +9,7 @@
 | HTTP adapter | SRF and Spotify request/response handling | Local deterministic fake server or transport fake; no live API dependency |
 | Application integration | Import and sync services with real DB plus fake upstreams | Success, duplicate retry, truncation split, rate limit, partial failure |
 | Smoke | Built Apache container and production artifact | Login, dashboard, manual fixture import, health endpoint |
-| Live acceptance | Owner-controlled SRF and Spotify accounts | One historical import, OAuth, reviewed match and private playlist sync |
+| Live acceptance | Owner-controlled SRF and Spotify accounts | One historical import, OAuth, reviewed match and public playlist sync |
 
 ## Critical Scenarios
 

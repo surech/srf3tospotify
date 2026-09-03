@@ -123,6 +123,8 @@ final readonly class PlaylistSyncService
                     $created->id,
                     $created->ownerId,
                 );
+            } else {
+                $this->spotify->updatePlaylistVisibility($spotifyPlaylistId, $configuration->public);
             }
 
             $coverImage = $this->playlistCoverImages[$configuration->name] ?? null;
