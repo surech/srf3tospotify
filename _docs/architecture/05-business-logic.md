@@ -36,6 +36,7 @@
 - Load every configured playlist and calculate its ranking policy independently within the same locked synchronization.
 - Persist the ordered desired snapshot before calling Spotify.
 - Create each configured playlist once through `POST /v1/me/playlists` when no playlist ID exists.
+- Convert each configured PNG cover to JPEG and upload it through `PUT /v1/playlists/{playlist_id}/images` on every synchronization.
 - Replace items through the current `/v1/playlists/{playlist_id}/items` contract. Replace the first batch and append subsequent batches of at most 100.
 - Never modify a playlist not owned by the authorized Spotify account.
 - On failure, retain the desired snapshot and previous successful run metadata for retry and diagnosis.
@@ -83,6 +84,7 @@ sequenceDiagram
         end
         App->>DB: persist ordered desired snapshot
         App->>Spotify: refresh access token if required
+        App->>Spotify: upload JPEG playlist cover
         App->>Spotify: replace first item batch
         opt more than 100 tracks
             App->>Spotify: append remaining batches

@@ -22,6 +22,7 @@ final readonly class PlaylistSyncService
 {
     private const LOCK_NAME = 'srf3tospotify:spotify-sync';
 
+    /** @param array<string, string> $playlistCoverImages */
     public function __construct(
         private RankingService $rankingService,
         private MatchingService $matchingService,
@@ -31,6 +32,7 @@ final readonly class PlaylistSyncService
         private AdvisoryLock $lock,
         private JsonLogger $logger,
         private DateTimeZone $timezone,
+        private array $playlistCoverImages = [],
     ) {}
 
     public function synchronize(string $triggerType = 'manual', ?DateTimeImmutable $now = null): PlaylistSyncResult
@@ -121,6 +123,11 @@ final readonly class PlaylistSyncService
                     $created->id,
                     $created->ownerId,
                 );
+            }
+
+            $coverImage = $this->playlistCoverImages[$configuration->name] ?? null;
+            if ($coverImage !== null) {
+                $this->spotify->uploadPlaylistCoverImage($spotifyPlaylistId, $coverImage);
             }
 
             $uris = array_map(static fn(array $item): string => (string) $item['match']->uri, $desired);

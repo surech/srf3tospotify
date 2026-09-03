@@ -101,6 +101,32 @@ final readonly class SpotifyClient implements SpotifyGateway
         return false;
     }
 
+    public function uploadPlaylistCoverImage(string $playlistId, string $jpeg): void
+    {
+        if ($playlistId === '') {
+            throw new SpotifyException('Spotify playlist ID is required.');
+        }
+        if ($jpeg === '') {
+            throw new SpotifyException('Spotify playlist cover image is required.');
+        }
+
+        $payload = base64_encode($jpeg);
+        if (\strlen($payload) > 256 * 1024) {
+            throw new SpotifyException('Spotify playlist cover image exceeds the 256 KB payload limit.');
+        }
+
+        $response = $this->httpClient->request(
+            'PUT',
+            self::API_URL . '/playlists/' . rawurlencode($playlistId) . '/images',
+            [
+                'Authorization' => 'Bearer ' . $this->tokenProvider->accessToken(),
+                'Content-Type' => 'image/jpeg',
+            ],
+            $payload,
+        );
+        $this->assertStatus($response, [202]);
+    }
+
     public function replacePlaylistItems(string $playlistId, array $uris): string
     {
         if ($playlistId === '') {

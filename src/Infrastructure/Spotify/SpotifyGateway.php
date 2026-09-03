@@ -15,6 +15,8 @@ interface SpotifyGateway
 
     public function playlistExists(string $playlistId): bool;
 
+    public function uploadPlaylistCoverImage(string $playlistId, string $jpeg): void;
+
     /** @param list<string> $uris */
     public function replacePlaylistItems(string $playlistId, array $uris): string;
 }

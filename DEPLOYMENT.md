@@ -2,7 +2,7 @@
 
 ## 1. Hoster prüfen
 
-- PHP 8.2+ mit `curl`, `intl`, `json`, `mbstring`, `openssl`, `pdo`, `pdo_mysql`
+- PHP 8.2+ mit `curl`, `gd`, `intl`, `json`, `mbstring`, `openssl`, `pdo`, `pdo_mysql`
 - MariaDB 10.6+
 - HTTPS-Zertifikat
 - Ausgehendes HTTPS zu `il.srf.ch`, `accounts.spotify.com`, `api.spotify.com`
@@ -21,7 +21,7 @@ sha256sum -c build/srf3tospotify-release.tar.gz.sha256
 
 - FTP-Quelle: Inhalt aus `build/release/`
 - Alternative: Archiv im Hoster-Dateimanager hochladen und ausserhalb der Dokumentwurzel entpacken
-- Enthalten: Produktionscode, Migrationen, Templates, Public Assets, Composer-Vendor
+- Enthalten: Produktionscode, Migrationen, Templates, Public Assets, Playlist-Cover, Composer-Vendor
 - Ausgeschlossen: `.env`, Tests, Dockerdaten, Logs, Dev-Abhängigkeiten
 
 ## 3. Verzeichnisse
@@ -92,7 +92,9 @@ Danach Dashboard anmelden, einen vergangenen Tag importieren, denselben Tag erne
 
 - Callback im Spotify Dashboard: `https://DEINE-DOMAIN/spotify/callback`
 - Dashboard-Aktion **Spotify verbinden**
+- Nach einem Update von einer Version ohne Playlist-Cover **Spotify verbinden** erneut ausführen, um `ugc-image-upload` freizugeben
 - Playlists **SRF 3 - Top 50** und **SRF 3 - Der Morgen** werden beim ersten Sync erstellt
+- Jeder Sync lädt `resources/playlist-covers/top50.png` und `resources/playlist-covers/der-morgen.png` als Cover hoch
 - Beide Playlists bleiben privat und verwenden die letzten 30 vollständigen Tage; **Der Morgen** berücksichtigt Montag bis Freitag von 06:00 Uhr inklusive bis 10:00 Uhr exklusive in Schweizer Lokalzeit
 
 ## 8. Automatisierung

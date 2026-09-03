@@ -12,6 +12,7 @@
 - [Spotify Authorization Code Flow](https://developer.spotify.com/documentation/web-api/tutorials/code-flow)
 - [Spotify Search for Item](https://developer.spotify.com/documentation/web-api/reference/search)
 - [Spotify Create Playlist](https://developer.spotify.com/documentation/web-api/reference/create-playlist)
+- [Spotify Add Custom Playlist Cover Image](https://developer.spotify.com/documentation/web-api/reference/upload-custom-playlist-cover)
 - [Spotify Add Items to Playlist](https://developer.spotify.com/documentation/web-api/reference/add-items-to-playlist)
 - [Spotify Quota Modes](https://developer.spotify.com/documentation/web-api/concepts/quota-modes)
 - [PHP supported versions](https://www.php.net/supported-versions.php)
@@ -22,6 +23,7 @@
 - Authorization Code Flow supports long-running server applications and refresh tokens.
 - A newly created Development Mode app is suitable for one personal account, requires the owner to have Spotify Premium, and supports up to five allowlisted users.
 - Search returns at most 10 results per requested item type according to the fetched 2026 reference.
+- Custom playlist covers require `ugc-image-upload` and a Base64-encoded JPEG payload no larger than 256 KB.
 - Playlist item writes accept at most 100 URIs per request.
 - New code must use playlist `items` contracts; deprecated `tracks` update contracts are excluded.
 

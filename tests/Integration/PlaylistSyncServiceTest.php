@@ -65,6 +65,8 @@ final class PlaylistSyncServiceTest extends TestCase
             'Song B|Artist B' => [$this->track('track000002', 'Song B', 'Artist B')],
         ];
         $matchRepository = new SpotifyMatchRepository($this->connection);
+        $top50Cover = "\xFF\xD8top-50-cover\xFF\xD9";
+        $morningCover = "\xFF\xD8morning-cover\xFF\xD9";
         $service = new PlaylistSyncService(
             new RankingService(new RankingRepository($this->connection), new DateTimeZone('Europe/Zurich')),
             new MatchingService($spotify, new MatchingEngine(), $matchRepository),
@@ -74,6 +76,10 @@ final class PlaylistSyncServiceTest extends TestCase
             new AdvisoryLock($this->connection),
             new JsonLogger($this->syncLogPath),
             new DateTimeZone('Europe/Zurich'),
+            [
+                'SRF 3 - Top 50' => $top50Cover,
+                'SRF 3 - Der Morgen' => $morningCover,
+            ],
         );
 
         $result = $service->synchronize('manual', $now);
@@ -85,6 +91,10 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertSame(0, $result->totalUnresolvedCount);
         self::assertSame(2, $spotify->createdPlaylists);
         self::assertSame(['SRF 3 - Top 50', 'SRF 3 - Der Morgen'], $spotify->createdPlaylistNames);
+        self::assertSame([
+            ['playlist_id' => 'fake-playlist-id', 'jpeg' => $top50Cover],
+            ['playlist_id' => 'fake-playlist-id-2', 'jpeg' => $morningCover],
+        ], $spotify->coverUploads);
         $configurations = (new PlaylistRepository($this->connection))->configurations();
         self::assertCount(2, $configurations);
         self::assertSame('SRF 3 - Der Morgen', $configurations[1]->name);

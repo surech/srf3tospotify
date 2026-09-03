@@ -25,6 +25,7 @@ bin/                 CLI entry points
 config/              non-secret configuration
 database/            ordered SQL migrations
 public/              document root and front controller
+resources/           non-public static source assets such as playlist covers
 src/                 PSR-4 application source
 templates/           server-rendered HTML
 tests/               unit and integration tests
