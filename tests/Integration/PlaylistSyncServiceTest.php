@@ -91,6 +91,7 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertSame(0, $result->totalUnresolvedCount);
         self::assertSame(2, $spotify->createdPlaylists);
         self::assertSame(['SRF 3 - Top 50', 'SRF 3 - Der Morgen'], $spotify->createdPlaylistNames);
+        self::assertSame([true, true], $spotify->createdPlaylistPublicStates);
         self::assertSame([
             ['playlist_id' => 'fake-playlist-id', 'jpeg' => $top50Cover],
             ['playlist_id' => 'fake-playlist-id-2', 'jpeg' => $morningCover],
@@ -103,7 +104,7 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertTrue($configurations[1]->rankingFilter->weekdaysOnly);
         self::assertSame(360, $configurations[1]->rankingFilter->localStartMinute);
         self::assertSame(600, $configurations[1]->rankingFilter->localEndMinute);
-        self::assertFalse($configurations[1]->public);
+        self::assertTrue($configurations[1]->public);
         self::assertSame([
             'spotify:track:track000001',
             'spotify:track:track000002',
@@ -183,6 +184,37 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertCount(2, $serialized['playlists']);
         $serializedMorning = $serialized['playlists'][1];
         self::assertSame('SRF 3 - Der Morgen', $serializedMorning['name']);
+    }
+
+    public function testUpdatesVisibilityOfExistingPlaylists(): void
+    {
+        $this->connection->exec(
+            "UPDATE playlists SET spotify_playlist_id = CASE name
+                WHEN 'SRF 3 - Top 50' THEN 'existing-top-50'
+                WHEN 'SRF 3 - Der Morgen' THEN 'existing-morning'
+             END, spotify_owner_id = 'fake-owner-id'",
+        );
+        $spotify = new FakeSpotifyGateway();
+        $matchRepository = new SpotifyMatchRepository($this->connection);
+        $service = new PlaylistSyncService(
+            new RankingService(new RankingRepository($this->connection), new DateTimeZone('Europe/Zurich')),
+            new MatchingService($spotify, new MatchingEngine(), $matchRepository),
+            $matchRepository,
+            new PlaylistRepository($this->connection),
+            $spotify,
+            new AdvisoryLock($this->connection),
+            new JsonLogger($this->syncLogPath),
+            new DateTimeZone('Europe/Zurich'),
+        );
+
+        $service->synchronize('manual', new DateTimeImmutable('2020-01-03T12:00:00+01:00'));
+
+        self::assertSame(0, $spotify->createdPlaylists);
+        self::assertSame(['existing-top-50', 'existing-morning'], $spotify->playlistExistenceChecks);
+        self::assertSame([
+            ['playlist_id' => 'existing-top-50', 'public' => true],
+            ['playlist_id' => 'existing-morning', 'public' => true],
+        ], $spotify->visibilityUpdates);
     }
 
     public function testRecreatesDeletedConfiguredPlaylist(): void
@@ -368,7 +400,7 @@ final class PlaylistSyncServiceTest extends TestCase
         $this->connection->exec('DELETE FROM songs WHERE NOT EXISTS (SELECT 1 FROM plays WHERE plays.song_id = songs.id)');
         $this->connection->exec(
             "UPDATE playlists SET spotify_playlist_id = NULL, spotify_owner_id = NULL,
-             ranking_days = 30, max_tracks = 50, is_public = 0",
+               ranking_days = 30, max_tracks = 50, is_public = 1",
         );
     }
 }

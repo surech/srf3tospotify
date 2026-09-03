@@ -54,7 +54,7 @@ docker compose exec -T app vendor/bin/phpunit --coverage-text --coverage-filter 
 Development Mode genügt für persönlichen Betrieb. Spotify verlangt aktuell ein Premium-Konto des App-Eigentümers.
 Nach einem Update von einer Version ohne Playlist-Cover **Spotify verbinden** erneut wählen, damit Spotify den zusätzlichen Bild-Upload-Scope freigibt.
 
-Der erste Sync erstellt zwei private Playlists:
+Der erste Sync erstellt zwei öffentliche Playlists. Bereits vorhandene Playlists werden beim nächsten Sync öffentlich geschaltet:
 
 - **SRF 3 - Top 50**: meistgespielte Songs der letzten 30 vollständigen Tage.
 - **SRF 3 - Der Morgen**: 50 meistgespielte Songs der letzten 30 vollständigen Tage, eingeschränkt auf Montag bis Freitag von 06:00 Uhr inklusive bis 10:00 Uhr exklusive in Schweizer Lokalzeit.
