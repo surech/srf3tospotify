@@ -27,6 +27,7 @@ final class SpotifyOAuthTest extends TestCase
         self::assertStringContainsString('state=state-value', $url);
         self::assertStringContainsString('playlist-modify-private%20playlist-modify-public', $url);
         self::assertStringContainsString('playlist-read-private', $url);
+        self::assertStringContainsString('ugc-image-upload', $url);
     }
 
     public function testExchangesCodeAndReturnsStoredAccessToken(): void

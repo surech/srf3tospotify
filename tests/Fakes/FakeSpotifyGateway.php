@@ -39,6 +39,9 @@ final class FakeSpotifyGateway implements SpotifyGateway
     /** @var list<string> */
     public array $createdPlaylistNames = [];
 
+    /** @var list<array{playlist_id: string, jpeg: string}> */
+    public array $coverUploads = [];
+
     public int $createdPlaylists = 0;
 
     public function searchTracks(string $title, string $artist): array
@@ -69,6 +72,11 @@ final class FakeSpotifyGateway implements SpotifyGateway
         $this->playlistExistenceChecks[] = $playlistId;
 
         return $this->playlistExistence[$playlistId] ?? true;
+    }
+
+    public function uploadPlaylistCoverImage(string $playlistId, string $jpeg): void
+    {
+        $this->coverUploads[] = ['playlist_id' => $playlistId, 'jpeg' => $jpeg];
     }
 
     public function replacePlaylistItems(string $playlistId, array $uris): string

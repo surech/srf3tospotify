@@ -21,6 +21,7 @@ use App\Infrastructure\Database\RankingRepository;
 use App\Infrastructure\Database\SpotifyMatchRepository;
 use App\Infrastructure\Http\CurlHttpClient;
 use App\Infrastructure\Security\TokenCipher;
+use App\Infrastructure\Spotify\PngPlaylistCoverLoader;
 use App\Infrastructure\Spotify\SpotifyClient;
 use App\Infrastructure\Spotify\SpotifyOAuth;
 use App\Infrastructure\Srf\SrfClient;
@@ -103,6 +104,8 @@ final class ApplicationFactory
     {
         $connection = $this->connection();
         $spotify = $this->spotifyClient();
+        $coverLoader = new PngPlaylistCoverLoader();
+        $coverDirectory = $this->projectRoot . '/resources/playlist-covers';
 
         return new PlaylistSyncService(
             $this->rankingService(),
@@ -117,6 +120,10 @@ final class ApplicationFactory
             new AdvisoryLock($connection),
             new JsonLogger($this->projectRoot . '/var/log/application.log'),
             new DateTimeZone('Europe/Zurich'),
+            [
+                'SRF 3 - Top 50' => $coverLoader->load($coverDirectory . '/top50.png'),
+                'SRF 3 - Der Morgen' => $coverLoader->load($coverDirectory . '/der-morgen.png'),
+            ],
         );
     }
 

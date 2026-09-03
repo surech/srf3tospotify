@@ -88,6 +88,21 @@ final class SpotifyClientTest extends TestCase
         self::assertFalse($client->playlistExists('playlist-id'));
     }
 
+    public function testUploadsBase64EncodedPlaylistCoverImage(): void
+    {
+        $http = new QueueHttpClient([new HttpResponse(202, [], '')]);
+        $client = new SpotifyClient($http, new StaticAccessTokenProvider());
+        $jpeg = "\xFF\xD8cover-image\xFF\xD9";
+
+        $client->uploadPlaylistCoverImage('playlist/id', $jpeg);
+
+        self::assertSame('PUT', $http->requests[0]['method']);
+        self::assertSame('https://api.spotify.com/v1/playlists/playlist%2Fid/images', $http->requests[0]['url']);
+        self::assertSame('Bearer test-access-token', $http->requests[0]['headers']['Authorization']);
+        self::assertSame('image/jpeg', $http->requests[0]['headers']['Content-Type']);
+        self::assertSame(base64_encode($jpeg), $http->requests[0]['body']);
+    }
+
     public function testReplacesThenAppendsInBatchesOfOneHundred(): void
     {
         $http = new QueueHttpClient([

@@ -4,9 +4,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         libcurl4-openssl-dev \
         libicu-dev \
+        libjpeg62-turbo-dev \
         libonig-dev \
+        libpng-dev \
         unzip \
-    && docker-php-ext-install curl intl mbstring pdo_mysql \
+    && docker-php-ext-configure gd --with-jpeg \
+    && docker-php-ext-install curl gd intl mbstring pdo_mysql \
     && pecl install pcov \
     && docker-php-ext-enable pcov \
     && a2enmod headers rewrite \

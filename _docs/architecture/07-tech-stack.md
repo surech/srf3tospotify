@@ -9,6 +9,7 @@
 | Application style | Framework-free modular monolith | Small scope and FTP deployment do not justify framework lifecycle or cache tooling |
 | Dependency management | Composer 2 with PSR-4 | Familiar packaging, test tooling and deterministic locked dependencies |
 | HTTP | PHP cURL extension behind a small transport interface | No runtime package required; controllable timeouts and headers |
+| Image processing | PHP GD extension | Converts bundled PNG covers to Spotify-compatible JPEG payloads |
 | Database | MariaDB with InnoDB via PDO | Hosting constraint, transactions, unique constraints and advisory locks |
 | UI | Server-rendered semantic HTML and project CSS | Single-owner workflow, minimal JavaScript and deployment footprint |
 | Logging | JSON Lines to protected file and CLI streams | Searchable without external monitoring service |
@@ -26,7 +27,7 @@
 ## Release Artifact
 
 - Composer install runs locally in Docker with `--no-dev --classmap-authoritative`.
-- Release contains application source, migrations, templates, public assets and production `vendor/`.
+- Release contains application source, migrations, templates, public assets, non-public playlist covers and production `vendor/`.
 - `.env`, test output, local logs and Docker database data are excluded.
 - The public document root points to `public/`; where impossible, server rules deny access to configuration, source, `vendor/`, database and `var/` paths.
 - Build produces an FTP-ready directory, compressed archive and SHA-256 checksum.

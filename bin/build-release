@@ -11,7 +11,7 @@ rm -rf "$release_dir"
 rm -f "$archive" "$archive.sha256"
 mkdir -p "$release_dir/var/log" "$release_dir/var/tmp"
 
-for path in bin composer.json composer.lock database public src templates; do
+for path in bin composer.json composer.lock database public resources src templates; do
     cp -R "$project_root/$path" "$release_dir/"
 done
 cp "$project_root/.env.example" "$project_root/.htaccess" "$project_root/README.md" "$project_root/DEPLOYMENT.md" "$release_dir/"
