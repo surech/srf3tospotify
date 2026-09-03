@@ -13,6 +13,8 @@ interface SpotifyGateway
 
     public function createPlaylist(string $name, string $description, bool $public): CreatedPlaylist;
 
+    public function playlistExists(string $playlistId): bool;
+
     /** @param list<string> $uris */
     public function replacePlaylistItems(string $playlistId, array $uris): string;
 }

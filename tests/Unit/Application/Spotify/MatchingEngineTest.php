@@ -31,6 +31,23 @@ final class MatchingEngineTest extends TestCase
         self::assertSame(1.0, $decision->confidence);
     }
 
+    public function testAcceptsFirstOfIdenticalSpotifyResults(): void
+    {
+        $decision = (new MatchingEngine())->decide(
+            'Song',
+            'Artist',
+            180_000,
+            [
+                $this->track('track000001', 'Song', 'Artist', 180_000),
+                $this->track('track000002', 'Song', 'Artist', 180_000),
+            ],
+        );
+
+        self::assertTrue($decision->accepted());
+        self::assertSame('track000001', $decision->track?->id);
+        self::assertSame(0.0, $decision->runnerUpConfidence);
+    }
+
     public function testRoutesAmbiguousVersionsToReview(): void
     {
         $decision = (new MatchingEngine())->decide(
@@ -39,13 +56,31 @@ final class MatchingEngineTest extends TestCase
             180_000,
             [
                 $this->track('track000001', 'Song', 'Artist', 180_000),
-                $this->track('track000002', 'Song', 'Artist', 180_100),
+                $this->track('track000002', 'Song', 'Artist', 181_001),
             ],
         );
 
         self::assertFalse($decision->accepted());
         self::assertSame('review', $decision->status);
         self::assertGreaterThan(0.90, $decision->runnerUpConfidence);
+    }
+
+    public function testTreatsCloseDurationAsDuplicatePreservingFirstCandidate(): void
+    {
+        $decision = (new MatchingEngine())->decide(
+            'VERTIGO',
+            'TIFFANY ARIS',
+            117_796,
+            [
+                $this->track('track000001', 'Vertigo', 'Tiffany Aris', 139_000),
+                $this->track('track000002', 'Vertigo', 'Tiffany Aris', 139_653),
+            ],
+        );
+
+        self::assertTrue($decision->accepted());
+        self::assertSame('track000001', $decision->track?->id);
+        self::assertGreaterThan(0.90, $decision->confidence);
+        self::assertSame(0.0, $decision->runnerUpConfidence);
     }
 
     public function testRoutesNoCandidateToReview(): void

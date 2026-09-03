@@ -71,6 +71,36 @@ final readonly class SpotifyClient implements SpotifyGateway
         return new CreatedPlaylist($id, $ownerId);
     }
 
+    public function playlistExists(string $playlistId): bool
+    {
+        if ($playlistId === '') {
+            throw new SpotifyException('Spotify playlist ID is required.');
+        }
+
+        $offset = 0;
+        do {
+            $query = http_build_query(['limit' => 50, 'offset' => $offset], '', '&', PHP_QUERY_RFC3986);
+            $payload = $this->requestJson('GET', self::API_URL . '/me/playlists?' . $query, null, [200]);
+            $items = $payload['items'] ?? null;
+            $next = \array_key_exists('next', $payload) ? $payload['next'] : false;
+            if (!\is_array($items) || ($next !== null && !\is_string($next))) {
+                throw new SpotifyException('Spotify playlists response is incomplete.');
+            }
+            foreach ($items as $item) {
+                $id = \is_array($item) ? ($item['id'] ?? null) : null;
+                if (!\is_string($id)) {
+                    throw new SpotifyException('Spotify playlist response is incomplete.');
+                }
+                if ($id === $playlistId) {
+                    return true;
+                }
+            }
+            $offset += 50;
+        } while ($next !== null);
+
+        return false;
+    }
+
     public function replacePlaylistItems(string $playlistId, array $uris): string
     {
         if ($playlistId === '') {

@@ -81,7 +81,7 @@ final readonly class PlaylistSyncService
             $this->playlistRepository->saveDesiredItems($runId, $desired);
 
             $spotifyPlaylistId = $configuration->spotifyPlaylistId;
-            if ($spotifyPlaylistId === null) {
+            if ($spotifyPlaylistId === null || !$this->spotify->playlistExists($spotifyPlaylistId)) {
                 $created = $this->spotify->createPlaylist(
                     $configuration->name,
                     $configuration->description,

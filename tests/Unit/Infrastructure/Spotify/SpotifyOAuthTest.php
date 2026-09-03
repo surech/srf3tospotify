@@ -26,6 +26,7 @@ final class SpotifyOAuthTest extends TestCase
         self::assertStringStartsWith('https://accounts.spotify.com/authorize?', $url);
         self::assertStringContainsString('state=state-value', $url);
         self::assertStringContainsString('playlist-modify-private%20playlist-modify-public', $url);
+        self::assertStringContainsString('playlist-read-private', $url);
     }
 
     public function testExchangesCodeAndReturnsStoredAccessToken(): void

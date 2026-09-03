@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Web;
 
 use App\Application\Import\ImportLocked;
+use App\Infrastructure\Spotify\SpotifyNotAuthorized;
 use App\Infrastructure\Spotify\SpotifyRateLimited;
 use App\Web\CsrfGuard;
 use App\Web\OAuthState;
@@ -103,6 +104,27 @@ final class WebApplicationTest extends TestCase
 
         self::assertSame(200, $authorized->status);
         self::assertSame(['http-cron'], $this->operations->synchronizations);
+    }
+
+    public function testSyncWithoutSpotifyAuthorizationRedirectsToOAuth(): void
+    {
+        $this->login();
+        $this->operations->synchronizeException = new SpotifyNotAuthorized('Spotify authorization is required.');
+
+        $response = $this->application->handle(new Request('POST', '/actions/sync', form: [
+            '_csrf' => $this->csrf->token(),
+        ]));
+
+        self::assertSame(303, $response->status);
+        self::assertSame('/spotify/authorize', $response->headers['Location']);
+
+        $internal = $this->application->handle(new Request(
+            'POST',
+            '/internal/cron/sync',
+            headers: ['authorization' => 'Bearer cron-secret'],
+        ));
+        self::assertSame(409, $internal->status);
+        self::assertStringContainsString('SPOTIFY_NOT_AUTHORIZED', $internal->body);
     }
 
     public function testOAuthCallbackValidatesOneTimeState(): void
@@ -255,13 +277,30 @@ final class WebApplicationTest extends TestCase
         self::assertSame(503, $limited->status);
         self::assertSame('17', $limited->headers['Retry-After']);
 
-        $this->operations->dashboardException = new RuntimeException('private detail');
+        $this->operations->synchronizeException = new RuntimeException('Spotify <diagnostic> detail');
         $errorLog = sys_get_temp_dir() . '/srf3spotify-web-error-' . bin2hex(random_bytes(8)) . '.log';
         $previousErrorLog = ini_set('error_log', $errorLog);
         try {
-            $unexpected = $this->application->handle(new Request('GET', '/'));
+            $unexpected = $this->application->handle(new Request('POST', '/actions/sync', form: [
+                '_csrf' => $token,
+            ]));
             self::assertSame(500, $unexpected->status);
-            self::assertStringNotContainsString('private detail', $unexpected->body);
+            self::assertStringContainsString('Technische Details', $unexpected->body);
+            self::assertStringContainsString('RuntimeException', $unexpected->body);
+            self::assertStringContainsString('Spotify &lt;diagnostic&gt; detail', $unexpected->body);
+            self::assertStringNotContainsString('Spotify <diagnostic> detail', $unexpected->body);
+            self::assertStringContainsString('POST /actions/sync', $unexpected->body);
+            self::assertStringNotContainsString('WebApplication.php', $unexpected->body);
+            self::assertSame(1, preg_match(
+                '~Fehler-ID</dt>\s*<dd><code>([0-9a-f-]{36})</code>~',
+                $unexpected->body,
+                $matches,
+            ));
+            $errorId = $matches[1] ?? '';
+            self::assertNotSame('', $errorId);
+            $logContents = file_get_contents($errorLog);
+            self::assertIsString($logContents);
+            self::assertStringContainsString('[' . $errorId . '] POST /actions/sync', $logContents);
         } finally {
             if ($previousErrorLog !== false) {
                 ini_set('error_log', $previousErrorLog);

@@ -34,7 +34,7 @@ final readonly class SpotifyOAuth implements AccessTokenProvider
             'client_id' => $this->clientId,
             'response_type' => 'code',
             'redirect_uri' => $redirectUri,
-            'scope' => 'playlist-modify-private playlist-modify-public',
+            'scope' => 'playlist-modify-private playlist-modify-public playlist-read-private',
             'state' => $state,
         ], '', '&', PHP_QUERY_RFC3986);
     }

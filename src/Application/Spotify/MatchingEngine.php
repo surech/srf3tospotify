@@ -9,12 +9,31 @@ use App\Infrastructure\Spotify\SpotifyTrack;
 
 final class MatchingEngine
 {
+    private const DUPLICATE_DURATION_TOLERANCE_MS = 1_000;
+
     /** @param list<SpotifyTrack> $candidates */
     public function decide(string $title, string $artist, int $durationMs, array $candidates): MatchDecision
     {
         $scored = [];
         foreach ($candidates as $candidate) {
-            $scored[] = ['track' => $candidate, 'score' => $this->score($title, $artist, $durationMs, $candidate)];
+            $duplicate = false;
+            foreach ($scored as $existing) {
+                if (
+                    $existing['track']->title === $candidate->title
+                    && $existing['track']->artists === $candidate->artists
+                    && abs($existing['track']->durationMs - $candidate->durationMs)
+                        <= self::DUPLICATE_DURATION_TOLERANCE_MS
+                ) {
+                    $duplicate = true;
+                    break;
+                }
+            }
+            if (!$duplicate) {
+                $scored[] = [
+                    'track' => $candidate,
+                    'score' => $this->score($title, $artist, $durationMs, $candidate),
+                ];
+            }
         }
         usort($scored, static fn(array $left, array $right): int => $right['score'] <=> $left['score']);
 
