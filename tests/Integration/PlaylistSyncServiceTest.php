@@ -99,6 +99,43 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertIsInt($record['context']['duration_ms']);
     }
 
+    public function testRecreatesDeletedConfiguredPlaylist(): void
+    {
+        $now = new DateTimeImmutable('2020-01-03T12:00:00+01:00');
+        $this->importTestPlays($now);
+        $this->connection->exec(
+            "UPDATE playlists SET spotify_playlist_id = 'deleted-playlist-id', spotify_owner_id = 'fake-owner-id'",
+        );
+        $spotify = new FakeSpotifyGateway();
+        $spotify->playlistExistence['deleted-playlist-id'] = false;
+        $spotify->searchResults = [
+            'Song A|Artist A' => [$this->track('track000001', 'Song A', 'Artist A')],
+            'Song B|Artist B' => [$this->track('track000002', 'Song B', 'Artist B')],
+        ];
+        $matchRepository = new SpotifyMatchRepository($this->connection);
+        $service = new PlaylistSyncService(
+            new RankingService(new RankingRepository($this->connection), new DateTimeZone('Europe/Zurich')),
+            new MatchingService($spotify, new MatchingEngine(), $matchRepository),
+            $matchRepository,
+            new PlaylistRepository($this->connection),
+            $spotify,
+            new AdvisoryLock($this->connection),
+            new JsonLogger($this->syncLogPath),
+            new DateTimeZone('Europe/Zurich'),
+        );
+
+        $result = $service->synchronize('manual', $now);
+
+        self::assertSame(['deleted-playlist-id'], $spotify->playlistExistenceChecks);
+        self::assertSame(1, $spotify->createdPlaylists);
+        self::assertSame('fake-playlist-id', $result->playlistId);
+        self::assertSame(['fake-playlist-id'], $spotify->replacementPlaylistIds);
+        self::assertSame(
+            'fake-playlist-id',
+            $this->fetchValue('SELECT spotify_playlist_id FROM playlists ORDER BY id LIMIT 1'),
+        );
+    }
+
     public function testManualMatchCannotBeOverwrittenAutomatically(): void
     {
         $now = new DateTimeImmutable('2020-01-03T12:00:00+01:00');

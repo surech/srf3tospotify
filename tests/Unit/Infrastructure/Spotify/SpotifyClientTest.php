@@ -58,6 +58,36 @@ final class SpotifyClientTest extends TestCase
         );
     }
 
+    public function testFindsPlaylistAcrossCurrentUserPlaylistPages(): void
+    {
+        $http = new QueueHttpClient([
+            $this->response(200, [
+                'items' => [['id' => 'another-playlist']],
+                'next' => 'https://api.spotify.com/v1/me/playlists?limit=50&offset=50',
+            ]),
+            $this->response(200, [
+                'items' => [['id' => 'playlist-id']],
+                'next' => null,
+            ]),
+        ]);
+        $client = new SpotifyClient($http, new StaticAccessTokenProvider());
+
+        self::assertTrue($client->playlistExists('playlist-id'));
+        self::assertStringContainsString('limit=50&offset=0', $http->requests[0]['url']);
+        self::assertStringContainsString('limit=50&offset=50', $http->requests[1]['url']);
+    }
+
+    public function testReportsPlaylistMissingFromCurrentUserPlaylists(): void
+    {
+        $http = new QueueHttpClient([$this->response(200, [
+            'items' => [['id' => 'another-playlist']],
+            'next' => null,
+        ])]);
+        $client = new SpotifyClient($http, new StaticAccessTokenProvider());
+
+        self::assertFalse($client->playlistExists('playlist-id'));
+    }
+
     public function testReplacesThenAppendsInBatchesOfOneHundred(): void
     {
         $http = new QueueHttpClient([

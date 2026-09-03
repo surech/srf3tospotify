@@ -23,6 +23,15 @@ final class FakeSpotifyGateway implements SpotifyGateway
     /** @var list<list<string>> */
     public array $replacements = [];
 
+    /** @var array<string, bool> */
+    public array $playlistExistence = [];
+
+    /** @var list<string> */
+    public array $playlistExistenceChecks = [];
+
+    /** @var list<string> */
+    public array $replacementPlaylistIds = [];
+
     public int $createdPlaylists = 0;
 
     public function searchTracks(string $title, string $artist): array
@@ -44,8 +53,16 @@ final class FakeSpotifyGateway implements SpotifyGateway
         return new CreatedPlaylist('fake-playlist-id', 'fake-owner-id');
     }
 
+    public function playlistExists(string $playlistId): bool
+    {
+        $this->playlistExistenceChecks[] = $playlistId;
+
+        return $this->playlistExistence[$playlistId] ?? true;
+    }
+
     public function replacePlaylistItems(string $playlistId, array $uris): string
     {
+        $this->replacementPlaylistIds[] = $playlistId;
         $this->replacements[] = $uris;
 
         return 'fake-snapshot-id';
