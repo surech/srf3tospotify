@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\Database;
 
 use App\Application\Ranking\RankingEntry;
+use App\Application\Ranking\RankingFilter;
 use DateTimeImmutable;
 use PDO;
 use RuntimeException;
@@ -16,25 +17,39 @@ final readonly class PlaylistRepository
 
     public function configuration(): PlaylistConfiguration
     {
+        return $this->configurations()[0];
+    }
+
+    /** @return non-empty-list<PlaylistConfiguration> */
+    public function configurations(): array
+    {
         $query = $this->connection->query(
-            'SELECT id, spotify_playlist_id, spotify_owner_id, name, description, ranking_days, max_tracks, is_public '
-            . 'FROM playlists ORDER BY id LIMIT 1',
+            'SELECT id, spotify_playlist_id, spotify_owner_id, name, description, ranking_days, max_tracks, '
+            . 'weekdays_only, local_start_minute, local_end_minute, is_public FROM playlists ORDER BY id',
         );
-        $row = $query === false ? false : $query->fetch();
-        if ($row === false) {
+        $rows = $query === false ? [] : $query->fetchAll();
+        if ($rows === []) {
             throw new RuntimeException('Playlist configuration is missing; run database migrations.');
         }
 
-        return new PlaylistConfiguration(
-            (int) $row['id'],
-            $row['spotify_playlist_id'] === null ? null : (string) $row['spotify_playlist_id'],
-            $row['spotify_owner_id'] === null ? null : (string) $row['spotify_owner_id'],
-            (string) $row['name'],
-            (string) $row['description'],
-            (int) $row['ranking_days'],
-            (int) $row['max_tracks'],
-            (bool) $row['is_public'],
-        );
+        return array_values(array_map(
+            static fn(array $row): PlaylistConfiguration => new PlaylistConfiguration(
+                (int) $row['id'],
+                $row['spotify_playlist_id'] === null ? null : (string) $row['spotify_playlist_id'],
+                $row['spotify_owner_id'] === null ? null : (string) $row['spotify_owner_id'],
+                (string) $row['name'],
+                (string) $row['description'],
+                (int) $row['ranking_days'],
+                (int) $row['max_tracks'],
+                new RankingFilter(
+                    (bool) $row['weekdays_only'],
+                    $row['local_start_minute'] === null ? null : (int) $row['local_start_minute'],
+                    $row['local_end_minute'] === null ? null : (int) $row['local_end_minute'],
+                ),
+                (bool) $row['is_public'],
+            ),
+            $rows,
+        ));
     }
 
     public function saveSpotifyIdentity(int $playlistId, string $spotifyPlaylistId, string $spotifyOwnerId): void

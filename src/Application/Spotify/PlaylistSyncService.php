@@ -7,6 +7,7 @@ namespace App\Application\Spotify;
 use App\Application\Import\ImportLocked;
 use App\Application\Ranking\RankingService;
 use App\Infrastructure\Database\AdvisoryLock;
+use App\Infrastructure\Database\PlaylistConfiguration;
 use App\Infrastructure\Database\PlaylistRepository;
 use App\Infrastructure\Database\SpotifyMatchRepository;
 use App\Infrastructure\Spotify\SpotifyGateway;
@@ -42,11 +43,37 @@ final readonly class PlaylistSyncService
             throw new ImportLocked('Another Spotify synchronization is already running.');
         }
 
+        try {
+            $results = [];
+            $effectiveNow = $now ?? new DateTimeImmutable('now', $this->timezone);
+            $firstException = null;
+            foreach ($this->playlistRepository->configurations() as $configuration) {
+                try {
+                    $results[] = $this->synchronizePlaylist($configuration, $triggerType, $effectiveNow);
+                } catch (Throwable $exception) {
+                    $firstException ??= $exception;
+                }
+            }
+            if ($firstException !== null) {
+                throw $firstException;
+            }
+
+            return new PlaylistSyncResult($results);
+        } finally {
+            $this->lock->release(self::LOCK_NAME);
+        }
+    }
+
+    private function synchronizePlaylist(
+        PlaylistConfiguration $configuration,
+        string $triggerType,
+        DateTimeImmutable $effectiveNow,
+    ): SynchronizedPlaylist {
+        $startedAt = hrtime(true);
         $correlationId = Uuid::v4();
         $runId = null;
         try {
-            $configuration = $this->playlistRepository->configuration();
-            $toLocal = ($now ?? new DateTimeImmutable('now', $this->timezone))
+            $toLocal = $effectiveNow
                 ->setTimezone($this->timezone)
                 ->setTime(0, 0);
             $fromLocal = $toLocal->modify(\sprintf('-%d days', $configuration->rankingDays));
@@ -62,7 +89,8 @@ final readonly class PlaylistSyncService
             $ranking = $this->rankingService->top(
                 $configuration->rankingDays,
                 $configuration->maxTracks,
-                $now,
+                $effectiveNow,
+                $configuration->rankingFilter,
             );
             foreach ($ranking as $entry) {
                 $this->matchingService->resolve($entry);
@@ -99,7 +127,8 @@ final readonly class PlaylistSyncService
             $snapshotId = $this->spotify->replacePlaylistItems($spotifyPlaylistId, $uris);
             $unresolved = \count($ranking) - \count($desired);
             $this->playlistRepository->finishRun($runId, $snapshotId, $unresolved);
-            $result = new PlaylistSyncResult(
+            $result = new SynchronizedPlaylist(
+                $configuration->name,
                 $correlationId,
                 $spotifyPlaylistId,
                 $snapshotId,
@@ -107,6 +136,7 @@ final readonly class PlaylistSyncService
                 $unresolved,
             );
             $context = $result->toArray();
+            $context['status'] = 'succeeded';
             $context['duration_ms'] = self::durationMilliseconds($startedAt);
             $this->logger->info('spotify.sync.succeeded', $context);
 
@@ -117,14 +147,13 @@ final readonly class PlaylistSyncService
             }
             $this->logger->error('spotify.sync.failed', [
                 'status' => 'failed',
+                'name' => $configuration->name,
                 'correlation_id' => $correlationId,
                 'duration_ms' => self::durationMilliseconds($startedAt),
                 'exception' => $exception::class,
                 'message' => $exception->getMessage(),
             ]);
             throw $exception;
-        } finally {
-            $this->lock->release(self::LOCK_NAME);
         }
     }
 

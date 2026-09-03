@@ -17,8 +17,12 @@ final readonly class RankingService
     ) {}
 
     /** @return list<RankingEntry> */
-    public function top(int $days = 30, int $limit = 50, ?DateTimeImmutable $now = null): array
-    {
+    public function top(
+        int $days = 30,
+        int $limit = 50,
+        ?DateTimeImmutable $now = null,
+        ?RankingFilter $filter = null,
+    ): array {
         if ($days < 1 || $days > 3660) {
             throw new InvalidArgumentException('Ranking days must be between 1 and 3660.');
         }
@@ -36,6 +40,7 @@ final readonly class RankingService
             $fromLocal->setTimezone($utc),
             $toLocal->setTimezone($utc),
             $limit,
+            $filter ?? new RankingFilter(),
         );
     }
 }

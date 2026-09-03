@@ -140,7 +140,11 @@ final readonly class WebApplication
         if ($request->method === 'POST' && $request->path === '/actions/sync') {
             $this->requireCsrf($request);
             $result = $this->operations->synchronize('manual');
-            $this->flash(\sprintf('Spotify synchronisiert: %d Tracks.', (int) ($result['track_count'] ?? 0)));
+            $this->flash(\sprintf(
+                'Spotify synchronisiert: %d Playlists, %d Tracks.',
+                (int) ($result['playlist_count'] ?? 0),
+                (int) ($result['total_track_count'] ?? 0),
+            ));
 
             return Response::redirect('/');
         }

@@ -92,8 +92,8 @@ Danach Dashboard anmelden, einen vergangenen Tag importieren, denselben Tag erne
 
 - Callback im Spotify Dashboard: `https://DEINE-DOMAIN/spotify/callback`
 - Dashboard-Aktion **Spotify verbinden**
-- Zielplaylist wird beim ersten Sync erstellt
-- Private Playlist und Top 50 der letzten 30 vollständigen Tage bleiben aktuelle Standardannahme
+- Playlists **SRF 3 - Top 50** und **SRF 3 - Der Morgen** werden beim ersten Sync erstellt
+- Beide Playlists bleiben privat und verwenden die letzten 30 vollständigen Tage; **Der Morgen** berücksichtigt Montag bis Freitag von 06:00 Uhr inklusive bis 10:00 Uhr exklusive in Schweizer Lokalzeit
 
 ## 8. Automatisierung
 

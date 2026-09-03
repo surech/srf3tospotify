@@ -8,6 +8,7 @@ use App\Infrastructure\Spotify\CreatedPlaylist;
 use App\Infrastructure\Spotify\SpotifyGateway;
 use App\Infrastructure\Spotify\SpotifyTrack;
 use RuntimeException;
+use Throwable;
 
 final class FakeSpotifyGateway implements SpotifyGateway
 {
@@ -32,6 +33,12 @@ final class FakeSpotifyGateway implements SpotifyGateway
     /** @var list<string> */
     public array $replacementPlaylistIds = [];
 
+    /** @var array<string, Throwable> */
+    public array $replacementFailures = [];
+
+    /** @var list<string> */
+    public array $createdPlaylistNames = [];
+
     public int $createdPlaylists = 0;
 
     public function searchTracks(string $title, string $artist): array
@@ -48,9 +55,13 @@ final class FakeSpotifyGateway implements SpotifyGateway
 
     public function createPlaylist(string $name, string $description, bool $public): CreatedPlaylist
     {
+        $this->createdPlaylistNames[] = $name;
         ++$this->createdPlaylists;
+        $playlistId = $this->createdPlaylists === 1
+            ? 'fake-playlist-id'
+            : 'fake-playlist-id-' . $this->createdPlaylists;
 
-        return new CreatedPlaylist('fake-playlist-id', 'fake-owner-id');
+        return new CreatedPlaylist($playlistId, 'fake-owner-id');
     }
 
     public function playlistExists(string $playlistId): bool
@@ -64,6 +75,9 @@ final class FakeSpotifyGateway implements SpotifyGateway
     {
         $this->replacementPlaylistIds[] = $playlistId;
         $this->replacements[] = $uris;
+        if (isset($this->replacementFailures[$playlistId])) {
+            throw $this->replacementFailures[$playlistId];
+        }
 
         return 'fake-snapshot-id';
     }

@@ -98,6 +98,9 @@ erDiagram
         string name
         integer ranking_days
         integer max_tracks
+        boolean weekdays_only
+        integer local_start_minute nullable
+        integer local_end_minute nullable
         boolean public
     }
     SYNC_RUN {
@@ -124,7 +127,8 @@ erDiagram
 
 - MariaDB connection and session timezone are forced to UTC.
 - Local calendar boundaries are calculated with `Europe/Zurich` before conversion to UTC; this preserves 23- and 25-hour daylight-saving days.
-- SRF timestamp offset is stored for diagnostics but never used for ranking comparisons.
+- SRF timestamp offset reconstructs the local weekday and minute for filtered rankings without relying on MariaDB timezone tables.
+- Null local start/end minutes mean all-day ranking; configured ranges include the start minute and exclude the end minute.
 - OAuth token ciphertext uses authenticated encryption; the encryption key comes from an environment variable and is never stored in MariaDB.
 - Raw upstream JSON is not retained by default; sanitized fixture samples belong only in tests.
 - Cleanup removes completed run metadata after 90 days. `play.import_run_id` becomes null through `ON DELETE SET NULL`; broadcast history remains intact.

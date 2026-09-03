@@ -187,6 +187,10 @@ final class WebApplicationTest extends TestCase
             '_csrf' => $token,
         ]))->status);
         self::assertSame(['manual'], $this->operations->synchronizations);
+        self::assertStringContainsString(
+            'Spotify synchronisiert: 2 Playlists, 4 Tracks.',
+            $this->application->handle(new Request('GET', '/'))->body,
+        );
 
         self::assertSame(303, $this->application->handle(new Request('POST', '/matches/42', form: [
             '_csrf' => $token,
