@@ -48,6 +48,45 @@ final readonly class RankingService
         );
     }
 
+    /** @return list<RankingEntry> */
+    public function allBetween(
+        DateTimeImmutable $fromUtc,
+        DateTimeImmutable $toUtcExclusive,
+        ?RankingFilter $filter = null,
+    ): array {
+        if ($fromUtc >= $toUtcExclusive) {
+            throw new InvalidArgumentException('Ranking start must precede end.');
+        }
+
+        return $this->repository->allSongs(
+            $fromUtc,
+            $toUtcExclusive,
+            $filter ?? new RankingFilter(),
+        );
+    }
+
+    /**
+     * @param list<int> $songIds
+     * @return array<int, list<DateTimeImmutable>>
+     */
+    public function playTimesBetween(
+        DateTimeImmutable $fromUtc,
+        DateTimeImmutable $toUtcExclusive,
+        array $songIds,
+        ?RankingFilter $filter = null,
+    ): array {
+        if ($fromUtc >= $toUtcExclusive) {
+            throw new InvalidArgumentException('Ranking start must precede end.');
+        }
+
+        return $this->repository->playTimesBySong(
+            $fromUtc,
+            $toUtcExclusive,
+            $songIds,
+            $filter ?? new RankingFilter(),
+        );
+    }
+
     /** @return list<array{entry: RankingEntry, play_times: list<DateTimeImmutable>}> */
     public function topWithPlayTimes(
         int $days = 30,

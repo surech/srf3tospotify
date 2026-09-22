@@ -18,6 +18,7 @@ final readonly class PlaylistConfiguration
         public string $description,
         public int $rankingDays,
         public int $maxTracks,
+        public ?int $targetTracks,
         public RankingFilter $rankingFilter,
         public bool $public,
         public ?DateTimeImmutable $fixedFromUtc = null,
@@ -28,6 +29,9 @@ final readonly class PlaylistConfiguration
         }
         if ($fixedFromUtc !== null && $fixedToUtcExclusive !== null && $fixedFromUtc >= $fixedToUtcExclusive) {
             throw new InvalidArgumentException('Fixed ranking start must precede end.');
+        }
+        if ($targetTracks !== null && ($targetTracks < 1 || $targetTracks > $maxTracks)) {
+            throw new InvalidArgumentException('Playlist target tracks must be within the configured maximum.');
         }
     }
 }

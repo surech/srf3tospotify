@@ -304,6 +304,23 @@ final class WebApplicationTest extends TestCase
                 'match_status' => 'rejected',
                 'play_times' => [],
             ]],
+            'skipped' => [[
+                'song_id' => 45,
+                'title' => 'Missing Match',
+                'artist' => 'Unmatched Artist',
+                'play_count' => 1,
+                'match_status' => 'pending',
+                'airplay_rank' => 4,
+                'skip_reason' => 'missing_match',
+                'play_times' => [],
+            ]],
+            'target' => [
+                'requested_count' => 50,
+                'track_count' => 3,
+                'ignored_count' => 0,
+                'missing_match_count' => 1,
+                'duplicate_track_count' => 0,
+            ],
         ];
         $this->login();
 
@@ -319,6 +336,12 @@ final class WebApplicationTest extends TestCase
         self::assertStringContainsString('Test &lt;Song&gt;', $detail->body);
         self::assertStringContainsString('status-pending', $detail->body);
         self::assertStringContainsString('status-rejected', $detail->body);
+        self::assertStringContainsString('Nächster Spotify-Sync', $detail->body);
+        self::assertStringContainsString('Nicht im Sync-Ziel', $detail->body);
+        self::assertStringContainsString('Kein akzeptierter Spotify-Match', $detail->body);
+        self::assertStringContainsString('data-dialog-target="ignore-song-42"', $detail->body);
+        self::assertStringContainsString('name="scope" value="playlist" checked', $detail->body);
+        self::assertStringContainsString('name="reason" maxlength="500"', $detail->body);
         self::assertStringContainsString(
             '<time datetime="2026-08-01T12:34:00+02:00">01.08.2026, 12:34 Uhr</time>',
             $detail->body,
@@ -363,6 +386,122 @@ final class WebApplicationTest extends TestCase
         $invalid = $this->application->handle(new Request('GET', '/playlists/not-an-id'));
         self::assertSame(404, $invalid->status);
         self::assertStringContainsString('<!doctype html>', $invalid->body);
+    }
+
+    public function testIgnoredSongsPageAndMutationsRequireValidScopeAndCsrf(): void
+    {
+        $this->operations->ignoredSongsPage = [
+            'songs' => [[
+                'song_id' => 42,
+                'title' => 'Ignored Song',
+                'artist' => 'Ignored Artist',
+                'rules' => [[
+                    'id' => 7,
+                    'playlist_name' => 'SRF 3 - Top 50',
+                    'is_global' => false,
+                    'is_active' => true,
+                    'reason' => 'Not suitable',
+                    'ignored_at' => '22.09.2026, 10:00',
+                    'reactivated_at' => null,
+                ]],
+                'active_specific_playlists' => ['SRF 3 - Top 50'],
+                'has_active_global' => false,
+                'active_rule_count' => 1,
+                'can_ignore_globally' => true,
+            ]],
+            'song_count' => 1,
+            'active_rule_count' => 1,
+            'include_history' => false,
+        ];
+        $this->login();
+        $token = $this->csrf->token();
+
+        $page = $this->application->handle(new Request('GET', '/ignored-songs', ['history' => '1']));
+        self::assertSame(200, $page->status);
+        self::assertStringContainsString('Ignored Song', $page->body);
+        self::assertStringContainsString('Not suitable', $page->body);
+        self::assertStringContainsString('name="history"', $page->body);
+
+        $ignored = $this->application->handle(new Request('POST', '/ignored-songs', form: [
+            '_csrf' => $token,
+            'song_id' => '42',
+            'playlist_id' => '2',
+            'source_playlist_id' => '2',
+            'scope' => 'playlist',
+            'reason' => 'Too repetitive',
+        ]));
+        self::assertSame(303, $ignored->status);
+        self::assertSame('/playlists/2', $ignored->headers['Location']);
+        self::assertSame([
+            ['song_id' => 42, 'playlist_id' => 2, 'reason' => 'Too repetitive'],
+        ], $this->operations->ignoredSongs);
+
+        $reactivated = $this->application->handle(new Request(
+            'POST',
+            '/ignored-songs/7/reactivate',
+            form: ['_csrf' => $token, 'return_history' => '1'],
+        ));
+        self::assertSame(303, $reactivated->status);
+        self::assertSame('/ignored-songs?history=1', $reactivated->headers['Location']);
+        self::assertSame([7], $this->operations->reactivatedRules);
+
+        $invalidScope = $this->application->handle(new Request('POST', '/ignored-songs', form: [
+            '_csrf' => $token,
+            'song_id' => '42',
+            'scope' => 'unknown',
+        ]));
+        self::assertSame(422, $invalidScope->status);
+
+        $invalidCsrf = $this->application->handle(new Request('POST', '/ignored-songs', form: [
+            '_csrf' => 'wrong',
+            'song_id' => '42',
+            'scope' => 'global',
+        ]));
+        self::assertSame(403, $invalidCsrf->status);
+    }
+
+    public function testSyncWarningAppearsInFlashAndDashboardHistory(): void
+    {
+        $this->operations->synchronizeResult = [
+            'playlist_count' => 1,
+            'track_count' => 47,
+            'unresolved_count' => 1,
+            'has_warnings' => true,
+            'total_track_count' => 47,
+            'total_requested_count' => 50,
+            'total_unresolved_count' => 1,
+            'total_ignored_count' => 2,
+            'total_duplicate_track_count' => 3,
+        ];
+        $this->operations->recentSyncs = [[
+            'playlist_name' => 'SRF 3 - Top 50',
+            'correlation_id' => 'test-sync',
+            'trigger_type' => 'manual',
+            'status' => 'succeeded',
+            'requested_count' => 50,
+            'track_count' => 47,
+            'ignored_count' => 2,
+            'unresolved_count' => 1,
+            'duplicate_track_count' => 3,
+            'spotify_snapshot_id' => 'snapshot',
+            'error_summary' => null,
+            'started_at' => '2026-09-22 10:00:00',
+            'finished_at' => '2026-09-22 10:01:00',
+        ]];
+        $this->login();
+
+        $sync = $this->application->handle(new Request('POST', '/actions/sync', form: [
+            '_csrf' => $this->csrf->token(),
+        ]));
+        self::assertSame(303, $sync->status);
+
+        $dashboard = $this->application->handle(new Request('GET', '/'));
+
+        self::assertStringContainsString('notice-warning', $dashboard->body);
+        self::assertStringContainsString('47 von 50 Tracks', $dashboard->body);
+        self::assertStringContainsString('2 ignoriert, 1 ohne Match, 3 Duplikate', $dashboard->body);
+        self::assertStringContainsString('status-warning', $dashboard->body);
+        self::assertStringContainsString('47 / 50', $dashboard->body);
     }
 
     public function testFailedLoginHealthAndUnknownRoute(): void

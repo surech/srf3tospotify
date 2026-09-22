@@ -1,7 +1,7 @@
 # SRF3ToSpotify Architecture
 
 **Status:** DRAFT
-**Last updated:** 2026-08-26
+**Last updated:** 2026-09-22
 
 This document indexes the implementation-guiding architecture draft.
 

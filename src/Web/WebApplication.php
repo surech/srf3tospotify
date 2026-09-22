@@ -115,12 +115,19 @@ final readonly class WebApplication
         if ($request->method === 'GET' && $request->path === '/') {
             $data = $this->operations->dashboard();
             $data['csrf'] = $this->csrf->token();
-            $data['flash'] = $this->consumeFlash();
+            $data += $this->consumeFlash();
             $data['yesterday'] = (new \DateTimeImmutable('now', new \DateTimeZone('Europe/Zurich')))
                 ->modify('-1 day')
                 ->format('Y-m-d');
 
             return Response::html($this->renderer->render('dashboard', $data));
+        }
+        if ($request->method === 'GET' && $request->path === '/ignored-songs') {
+            $data = $this->operations->ignoredSongs(($request->query['history'] ?? '') === '1');
+            $data['csrf'] = $this->csrf->token();
+            $data += $this->consumeFlash();
+
+            return Response::html($this->renderer->render('ignored-songs', $data));
         }
         if ($request->method === 'GET' && preg_match('~^/playlists/(\d+)/cover$~', $request->path, $matches) === 1) {
             $cover = $this->operations->playlistCover((int) $matches[1]);
@@ -139,6 +146,7 @@ final readonly class WebApplication
                 return $this->error($request, 404, 'NOT_FOUND', 'Seite nicht gefunden.');
             }
             $data['csrf'] = $this->csrf->token();
+            $data += $this->consumeFlash();
 
             return Response::html($this->renderer->render('playlist', $data));
         }
@@ -163,13 +171,55 @@ final readonly class WebApplication
         if ($request->method === 'POST' && $request->path === '/actions/sync') {
             $this->requireCsrf($request);
             $result = $this->operations->synchronize('manual');
-            $this->flash(\sprintf(
-                'Spotify synchronisiert: %d Playlists, %d Tracks.',
-                (int) ($result['playlist_count'] ?? 0),
-                (int) ($result['total_track_count'] ?? 0),
-            ));
+            if (($result['has_warnings'] ?? false) === true) {
+                $this->flash(\sprintf(
+                    'Spotify synchronisiert: %d von %d Tracks. Warnung: %d ignoriert, %d ohne Match, %d Duplikate.',
+                    (int) ($result['total_track_count'] ?? 0),
+                    (int) ($result['total_requested_count'] ?? 0),
+                    (int) ($result['total_ignored_count'] ?? 0),
+                    (int) ($result['total_unresolved_count'] ?? 0),
+                    (int) ($result['total_duplicate_track_count'] ?? 0),
+                ), 'warning');
+            } else {
+                $this->flash(\sprintf(
+                    'Spotify synchronisiert: %d Playlists, %d Tracks.',
+                    (int) ($result['playlist_count'] ?? 0),
+                    (int) ($result['total_track_count'] ?? 0),
+                ));
+            }
 
             return Response::redirect('/');
+        }
+        if ($request->method === 'POST' && $request->path === '/ignored-songs') {
+            $this->requireCsrf($request);
+            $scope = $request->form['scope'] ?? '';
+            if (!\in_array($scope, ['playlist', 'global'], true)) {
+                throw new InvalidArgumentException('Ignore scope must be playlist or global.');
+            }
+            $playlistId = $scope === 'playlist' ? (int) ($request->form['playlist_id'] ?? 0) : null;
+            if ($scope === 'playlist' && $playlistId < 1) {
+                throw new InvalidArgumentException('Playlist scope requires a playlist.');
+            }
+            $this->operations->ignoreSong(
+                (int) ($request->form['song_id'] ?? 0),
+                $playlistId,
+                $request->form['reason'] ?? null,
+            );
+            $this->flash('Song ignoriert. Spotify wird beim nächsten Sync aktualisiert.');
+            $sourcePlaylistId = (int) ($request->form['source_playlist_id'] ?? 0);
+
+            return Response::redirect($sourcePlaylistId > 0 ? '/playlists/' . $sourcePlaylistId : '/ignored-songs');
+        }
+        if ($request->method === 'POST'
+            && preg_match('~^/ignored-songs/(\d+)/reactivate$~', $request->path, $matches) === 1
+        ) {
+            $this->requireCsrf($request);
+            $this->operations->reactivateSong((int) $matches[1]);
+            $this->flash('Song reaktiviert. Die nächste Playlist-Auswahl berücksichtigt ihn wieder regulär.');
+
+            return Response::redirect(
+                ($request->form['return_history'] ?? '') === '1' ? '/ignored-songs?history=1' : '/ignored-songs',
+            );
         }
         if ($request->method === 'POST' && preg_match('~^/matches/(\d+)$~', $request->path, $matches) === 1) {
             $this->requireCsrf($request);
@@ -281,16 +331,23 @@ final readonly class WebApplication
         return rtrim($this->applicationUrl, '/') . '/spotify/callback';
     }
 
-    private function flash(string $message): void
+    private function flash(string $message, string $type = 'success'): void
     {
         $this->session->set('flash', $message);
+        $this->session->set('flash_type', $type);
     }
 
-    private function consumeFlash(): ?string
+    /** @return array{flash: string|null, flash_type: string} */
+    private function consumeFlash(): array
     {
         $message = $this->session->get('flash');
+        $type = $this->session->get('flash_type');
         $this->session->remove('flash');
+        $this->session->remove('flash_type');
 
-        return \is_string($message) ? $message : null;
+        return [
+            'flash' => \is_string($message) ? $message : null,
+            'flash_type' => $type === 'warning' ? 'warning' : 'success',
+        ];
     }
 }

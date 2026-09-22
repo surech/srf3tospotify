@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace App\Web;
 
+use App\Application\Ranking\RankingEntry;
 use App\ApplicationFactory;
 use App\Infrastructure\Database\DashboardRepository;
 use App\Infrastructure\Database\PlaylistConfiguration;
+use App\Infrastructure\Database\SongIgnoreRule;
+use App\Infrastructure\Database\StoredSpotifyMatch;
 use DateTimeImmutable;
+use DateTimeZone;
 
 final readonly class DefaultWebOperations implements WebOperations
 {
@@ -34,23 +38,103 @@ final readonly class DefaultWebOperations implements WebOperations
             return null;
         }
 
-        $rankingService = $this->factory->rankingService();
-        if ($configuration->fixedFromUtc !== null && $configuration->fixedToUtcExclusive !== null) {
-            $fromUtc = $configuration->fixedFromUtc;
-            $toUtcExclusive = $configuration->fixedToUtcExclusive;
-        } else {
-            [$fromUtc, $toUtcExclusive] = $rankingService->window($configuration->rankingDays);
-        }
+        $targetService = $this->factory->playlistTargetService();
+        [$fromUtc, $toUtcExclusive] = $targetService->window($configuration);
+        $target = $targetService->build($configuration, $fromUtc, $toUtcExclusive);
+        $entries = array_merge(
+            array_map(static fn(array $item): RankingEntry => $item['ranking'], $target->desired),
+            array_map(static fn(array $item): RankingEntry => $item['ranking'], $target->skipped),
+        );
+        $playTimes = $targetService->playTimes(
+            $configuration,
+            $fromUtc,
+            $toUtcExclusive,
+            array_map(static fn(RankingEntry $entry): int => $entry->songId, $entries),
+        );
+        $lastSyncAt = $this->factory->playlistRepository()->lastSuccessfulSyncAt($configuration->id);
 
         return [
-            'playlist' => $this->playlistData($configuration),
-            'ranking' => $this->rankingData($rankingService->topBetweenWithPlayTimes(
-                $fromUtc,
-                $toUtcExclusive,
-                $configuration->maxTracks,
-                $configuration->rankingFilter,
-            )),
+            'playlist' => $this->playlistData($configuration) + [
+                'max_tracks' => $configuration->maxTracks,
+                'target_tracks' => $configuration->targetTracks,
+                'last_sync_at' => $lastSyncAt?->setTimezone(new DateTimeZone('Europe/Zurich'))->format('d.m.Y, H:i'),
+            ],
+            'ranking' => array_map(
+                fn(array $item): array => $this->rankingEntryData(
+                    $item['ranking'],
+                    $playTimes[$item['ranking']->songId] ?? [],
+                    $item['match'],
+                ),
+                $target->desired,
+            ),
+            'skipped' => array_map(
+                fn(array $item): array => $this->rankingEntryData(
+                    $item['ranking'],
+                    $playTimes[$item['ranking']->songId] ?? [],
+                ) + [
+                    'skip_reason' => $item['reason'],
+                    'airplay_rank' => $item['airplay_rank'],
+                ],
+                $target->skipped,
+            ),
+            'target' => [
+                'requested_count' => $configuration->targetTracks,
+                'track_count' => \count($target->desired),
+                'ignored_count' => $target->ignoredCount,
+                'missing_match_count' => $target->missingMatchCount,
+                'duplicate_track_count' => $target->duplicateTrackCount,
+            ],
         ];
+    }
+
+    public function ignoredSongs(bool $includeHistory): array
+    {
+        $groups = [];
+        $activeRuleCount = 0;
+        foreach ($this->factory->songIgnoreService()->rules($includeHistory) as $rule) {
+            $groups[$rule->songId] ??= [
+                'song_id' => $rule->songId,
+                'artist' => $rule->artist,
+                'title' => $rule->title,
+                'rules' => [],
+                'active_specific_playlists' => [],
+                'has_active_global' => false,
+                'active_rule_count' => 0,
+            ];
+            $groups[$rule->songId]['rules'][] = $this->ignoreRuleData($rule);
+            if (!$rule->isActive()) {
+                continue;
+            }
+            ++$activeRuleCount;
+            ++$groups[$rule->songId]['active_rule_count'];
+            if ($rule->isGlobal()) {
+                $groups[$rule->songId]['has_active_global'] = true;
+            } elseif ($rule->playlistName !== null) {
+                $groups[$rule->songId]['active_specific_playlists'][] = $rule->playlistName;
+            }
+        }
+
+        foreach ($groups as &$group) {
+            $group['can_ignore_globally'] = $group['active_rule_count'] > 0 && !$group['has_active_global'];
+        }
+        unset($group);
+
+        return [
+            'songs' => array_values($groups),
+            'song_count' => \count($groups),
+            'active_rule_count' => $activeRuleCount,
+            'include_history' => $includeHistory,
+        ];
+    }
+
+    public function ignoreSong(int $songId, ?int $playlistId, ?string $reason): array
+    {
+        return $this->ignoreRuleData($this->factory->songIgnoreService()->ignore($songId, $playlistId, $reason));
+    }
+
+    public function reactivateSong(int $ruleId): array
+    {
+        return $this->ignoreRuleData($this->factory->songIgnoreService()->reactivate($ruleId));
     }
 
     public function playlistCover(int $playlistId): ?string
@@ -148,23 +232,48 @@ final readonly class DefaultWebOperations implements WebOperations
         ];
     }
 
-    /**
-     * @param list<array{entry: \App\Application\Ranking\RankingEntry, play_times: list<DateTimeImmutable>}> $ranking
-     * @return list<array<string, mixed>>
+    /** @param list<DateTimeImmutable> $playTimes
+     *  @return array<string, mixed>
      */
-    private function rankingData(array $ranking): array
+    private function rankingEntryData(
+        RankingEntry $entry,
+        array $playTimes,
+        ?StoredSpotifyMatch $match = null,
+    ): array {
+        $data = $entry->toArray();
+        if ($match !== null) {
+            $data['spotify_track_id'] = $match->trackId;
+            $data['match_status'] = $match->status;
+        }
+
+        return $data + [
+            'play_times' => array_map(
+                static fn(DateTimeImmutable $playedAt): array => [
+                    'datetime' => $playedAt->format(DATE_ATOM),
+                    'label' => $playedAt->format('d.m.Y, H:i'),
+                ],
+                $playTimes,
+            ),
+        ];
+    }
+
+    /** @return array<string, bool|int|string|null> */
+    private function ignoreRuleData(SongIgnoreRule $rule): array
     {
-        return array_map(
-            static fn(array $item): array => $item['entry']->toArray() + [
-                'play_times' => array_map(
-                    static fn(DateTimeImmutable $playedAt): array => [
-                        'datetime' => $playedAt->format(DATE_ATOM),
-                        'label' => $playedAt->format('d.m.Y, H:i'),
-                    ],
-                    $item['play_times'],
-                ),
-            ],
-            $ranking,
-        );
+        $timezone = new DateTimeZone('Europe/Zurich');
+
+        return [
+            'id' => $rule->id,
+            'song_id' => $rule->songId,
+            'artist' => $rule->artist,
+            'title' => $rule->title,
+            'playlist_id' => $rule->playlistId,
+            'playlist_name' => $rule->playlistName,
+            'is_global' => $rule->isGlobal(),
+            'is_active' => $rule->isActive(),
+            'reason' => $rule->reason,
+            'ignored_at' => $rule->ignoredAt->setTimezone($timezone)->format('d.m.Y, H:i'),
+            'reactivated_at' => $rule->reactivatedAt?->setTimezone($timezone)->format('d.m.Y, H:i'),
+        ];
     }
 }

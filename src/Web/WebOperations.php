@@ -12,6 +12,15 @@ interface WebOperations
     /** @return array<string, mixed>|null */
     public function playlist(int $playlistId): ?array;
 
+    /** @return array<string, mixed> */
+    public function ignoredSongs(bool $includeHistory): array;
+
+    /** @return array<string, mixed> */
+    public function ignoreSong(int $songId, ?int $playlistId, ?string $reason): array;
+
+    /** @return array<string, mixed> */
+    public function reactivateSong(int $ruleId): array;
+
     public function playlistCover(int $playlistId): ?string;
 
     /** @return array<string, mixed> */

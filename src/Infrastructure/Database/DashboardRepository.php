@@ -27,8 +27,11 @@ final readonly class DashboardRepository
     public function recentSyncs(int $limit = 8): array
     {
         $query = $this->connection->prepare(
-            'SELECT correlation_id, trigger_type, status, unresolved_count, spotify_snapshot_id, '
-            . 'error_summary, started_at, finished_at FROM sync_runs ORDER BY started_at DESC LIMIT :limit',
+            'SELECT p.name AS playlist_name, sr.correlation_id, sr.trigger_type, sr.status, '
+            . 'sr.requested_count, sr.track_count, sr.ignored_count, sr.unresolved_count, '
+            . 'sr.duplicate_track_count, sr.spotify_snapshot_id, sr.error_summary, sr.started_at, sr.finished_at '
+            . 'FROM sync_runs sr INNER JOIN playlists p ON p.id = sr.playlist_id '
+            . 'ORDER BY sr.started_at DESC LIMIT :limit',
         );
         $query->bindValue('limit', $limit, PDO::PARAM_INT);
         $query->execute();

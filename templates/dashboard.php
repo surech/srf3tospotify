@@ -19,6 +19,7 @@ $recentSyncs = is_array($recent_syncs ?? null) ? $recent_syncs : [];
     <div class="page-width topbar-inner">
       <a href="/" class="brand-mark">SRF<span>3</span> · Spotify</a>
       <nav class="top-actions" aria-label="Kontoverwaltung">
+        <a class="button button-secondary" href="/ignored-songs">Ignorierte Songs</a>
         <a class="button button-secondary" href="/spotify/authorize">Spotify verbinden</a>
         <form method="post" action="/logout">
           <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
@@ -49,7 +50,7 @@ $recentSyncs = is_array($recent_syncs ?? null) ? $recent_syncs : [];
 
     <div class="page-width content-stack">
       <?php if (isset($flash) && is_string($flash) && $flash !== ''): ?>
-        <p class="notice notice-success" role="status"><?= $escape($flash) ?></p>
+        <p class="notice notice-<?= $escape(($flash_type ?? 'success') === 'warning' ? 'warning' : 'success') ?>" role="status"><?= $escape($flash) ?></p>
       <?php endif; ?>
 
       <section class="command-band" aria-labelledby="actions-title">
@@ -144,12 +145,23 @@ $recentSyncs = is_array($recent_syncs ?? null) ? $recent_syncs : [];
           <div class="section-heading"><div><p class="eyebrow">Historie</p><h2>Spotify-Syncs</h2></div></div>
           <div class="table-wrap compact-table">
             <table>
-              <thead><tr><th>Zeit</th><th>Status</th><th>Offen</th><th>Snapshot</th></tr></thead>
+              <thead><tr><th>Playlist</th><th>Zeit</th><th>Status</th><th>Tracks</th><th>Ursachen</th></tr></thead>
               <tbody>
               <?php foreach ($recentSyncs as $run): ?>
-                <tr><td><?= $escape($run['started_at'] ?? '') ?></td><td><?= $escape($run['status'] ?? '') ?></td><td><?= $escape($run['unresolved_count'] ?? 0) ?></td><td class="truncate"><?= $escape($run['spotify_snapshot_id'] ?? '—') ?></td></tr>
+                <?php
+                $requestedCount = (int) ($run['requested_count'] ?? 0);
+                $trackCount = (int) ($run['track_count'] ?? 0);
+                $hasWarning = ($run['status'] ?? '') === 'succeeded' && $requestedCount > 0 && $trackCount < $requestedCount;
+                ?>
+                <tr>
+                  <td><?= $escape($run['playlist_name'] ?? '') ?></td>
+                  <td><?= $escape($run['started_at'] ?? '') ?></td>
+                  <td><span class="status <?= $hasWarning ? 'status-warning' : 'status-' . $escape($run['status'] ?? '') ?>"><?= $escape($hasWarning ? 'Warnung' : ($run['status'] ?? '')) ?></span></td>
+                  <td><?= $escape($trackCount) ?> / <?= $escape($requestedCount) ?></td>
+                  <td class="sync-causes"><?= $escape($run['ignored_count'] ?? 0) ?> ignoriert · <?= $escape($run['unresolved_count'] ?? 0) ?> ohne Match · <?= $escape($run['duplicate_track_count'] ?? 0) ?> doppelt</td>
+                </tr>
               <?php endforeach; ?>
-              <?php if ($recentSyncs === []): ?><tr><td colspan="4" class="empty-state">Keine Läufe.</td></tr><?php endif; ?>
+              <?php if ($recentSyncs === []): ?><tr><td colspan="5" class="empty-state">Keine Läufe.</td></tr><?php endif; ?>
               </tbody>
             </table>
           </div>
