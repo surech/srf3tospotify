@@ -30,6 +30,15 @@ final class FakeWebOperations implements WebOperations
     /** @var list<array<string, mixed>> */
     public array $ranking = [];
 
+    /** @var list<array<string, mixed>> */
+    public array $playlists = [];
+
+    /** @var array<int, array<string, mixed>> */
+    public array $playlistDetails = [];
+
+    /** @var array<int, string> */
+    public array $playlistCovers = [];
+
     public int $migrations = 0;
 
     public ?Throwable $dashboardException = null;
@@ -44,11 +53,22 @@ final class FakeWebOperations implements WebOperations
 
         return [
             'statistics' => ['plays' => 0, 'songs' => 0, 'unresolved' => 0, 'last_import' => null, 'last_sync' => null],
+            'playlists' => $this->playlists,
             'ranking' => $this->ranking,
             'unresolved_matches' => [],
             'recent_imports' => [],
             'recent_syncs' => [],
         ];
+    }
+
+    public function playlist(int $playlistId): ?array
+    {
+        return $this->playlistDetails[$playlistId] ?? null;
+    }
+
+    public function playlistCover(int $playlistId): ?string
+    {
+        return $this->playlistCovers[$playlistId] ?? null;
     }
 
     public function import(string $fromDate, string $toDate, string $trigger): array

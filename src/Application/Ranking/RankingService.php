@@ -55,10 +55,20 @@ final readonly class RankingService
         ?DateTimeImmutable $now = null,
         ?RankingFilter $filter = null,
     ): array {
-        $this->validateLimit($limit);
         [$fromUtc, $toUtcExclusive] = $this->window($days, $now);
+
+        return $this->topBetweenWithPlayTimes($fromUtc, $toUtcExclusive, $limit, $filter);
+    }
+
+    /** @return list<array{entry: RankingEntry, play_times: list<DateTimeImmutable>}> */
+    public function topBetweenWithPlayTimes(
+        DateTimeImmutable $fromUtc,
+        DateTimeImmutable $toUtcExclusive,
+        int $limit = 50,
+        ?RankingFilter $filter = null,
+    ): array {
         $filter ??= new RankingFilter();
-        $entries = $this->repository->topSongs($fromUtc, $toUtcExclusive, $limit, $filter);
+        $entries = $this->topBetween($fromUtc, $toUtcExclusive, $limit, $filter);
         $playTimes = $this->repository->playTimesBySong(
             $fromUtc,
             $toUtcExclusive,

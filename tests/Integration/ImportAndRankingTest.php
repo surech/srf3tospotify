@@ -101,6 +101,23 @@ final class ImportAndRankingTest extends TestCase
                 $rankingWithPlayTimes[0]['play_times'],
             ),
         );
+
+        $fixedRanking = $rankingService->topBetweenWithPlayTimes(
+            new DateTimeImmutable('2020-01-01T10:30:00Z'),
+            new DateTimeImmutable('2020-01-01T12:30:00Z'),
+            50,
+        );
+        self::assertSame(['Song B', 'Song A'], array_map(
+            static fn(array $item): string => $item['entry']->title,
+            $fixedRanking,
+        ));
+        self::assertSame(
+            ['2020-01-01T13:00:00+01:00'],
+            array_map(
+                static fn(DateTimeImmutable $playedAt): string => $playedAt->format(DATE_ATOM),
+                $fixedRanking[0]['play_times'],
+            ),
+        );
     }
 
     public function testRankingFiltersWeekdayMorningAcrossSwissDaylightSavingChange(): void

@@ -168,7 +168,7 @@ final class WebApplicationTest extends TestCase
 
         $dashboard = $this->application->handle(new Request('GET', '/'));
         self::assertSame(200, $dashboard->status);
-        self::assertStringContainsString('Meistgespielte Songs', $dashboard->body);
+        self::assertStringContainsString('Playlists', $dashboard->body);
 
         $token = $this->csrf->token();
         $import = $this->application->handle(new Request('POST', '/actions/import', form: [
@@ -211,7 +211,7 @@ final class WebApplicationTest extends TestCase
         self::assertTrue($this->session->destroyed);
     }
 
-    public function testDashboardRendersPlayHistoryDialog(): void
+    public function testDashboardDoesNotRenderRankingTable(): void
     {
         $this->operations->ranking = [[
             'song_id' => 42,
@@ -229,13 +229,138 @@ final class WebApplicationTest extends TestCase
         $dashboard = $this->application->handle(new Request('GET', '/'));
 
         self::assertSame(200, $dashboard->status);
-        self::assertStringContainsString('data-dialog-target="play-history-42"', $dashboard->body);
-        self::assertStringContainsString('id="play-history-42"', $dashboard->body);
-        self::assertStringContainsString('Test &lt;Song&gt;', $dashboard->body);
+        self::assertStringNotContainsString('data-dialog-target="play-history-42"', $dashboard->body);
+        self::assertStringNotContainsString('Meistgespielte Songs', $dashboard->body);
+    }
+
+    public function testDashboardLinksConfiguredPlaylistsByCoverAndName(): void
+    {
+        $this->operations->playlists = [[
+            'id' => 2,
+            'name' => 'SRF 3 - Der Morgen',
+            'description' => 'Werktags von 06:00 bis 10:00 Uhr.',
+            'cover_url' => '/playlists/2/cover',
+        ], [
+            'id' => 4,
+            'name' => 'Playlist ohne Cover',
+            'description' => 'Fallback testen.',
+            'cover_url' => null,
+        ]];
+        $this->login();
+
+        $dashboard = $this->application->handle(new Request('GET', '/'));
+
+        self::assertSame(200, $dashboard->status);
+        self::assertStringContainsString('href="/playlists/2"', $dashboard->body);
+        self::assertStringContainsString('src="/playlists/2/cover"', $dashboard->body);
+        self::assertStringContainsString('SRF 3 - Der Morgen', $dashboard->body);
+        self::assertStringContainsString('Werktags von 06:00 bis 10:00 Uhr.', $dashboard->body);
+        self::assertStringContainsString('href="/playlists/4"', $dashboard->body);
+        self::assertStringContainsString('playlist-cover-placeholder', $dashboard->body);
+    }
+
+    public function testPlaylistDetailRequiresAuthentication(): void
+    {
+        $detail = $this->application->handle(new Request('GET', '/playlists/2'));
+        $cover = $this->application->handle(new Request('GET', '/playlists/2/cover'));
+
+        self::assertSame(302, $detail->status);
+        self::assertSame('/login', $detail->headers['Location']);
+        self::assertSame(302, $cover->status);
+        self::assertSame('/login', $cover->headers['Location']);
+    }
+
+    public function testPlaylistDetailRendersCurrentRankingAndPlayHistory(): void
+    {
+        $this->operations->playlistDetails[2] = [
+            'playlist' => [
+                'id' => 2,
+                'name' => 'SRF 3 - Der Morgen',
+                'description' => 'Werktags von 06:00 bis 10:00 Uhr.',
+                'cover_url' => '/playlists/2/cover',
+            ],
+            'ranking' => [[
+                'song_id' => 42,
+                'title' => 'Test <Song>',
+                'artist' => 'Artist & Co.',
+                'play_count' => 2,
+                'match_status' => 'accepted',
+                'play_times' => [
+                    ['datetime' => '2026-08-01T12:34:00+02:00', 'label' => '01.08.2026, 12:34'],
+                    ['datetime' => '2026-07-31T08:15:00+02:00', 'label' => '31.07.2026, 08:15'],
+                ],
+            ], [
+                'song_id' => 43,
+                'title' => 'Pending Song',
+                'artist' => 'Pending Artist',
+                'play_count' => 1,
+                'match_status' => 'pending',
+                'play_times' => [],
+            ], [
+                'song_id' => 44,
+                'title' => 'Rejected Song',
+                'artist' => 'Rejected Artist',
+                'play_count' => 1,
+                'match_status' => 'rejected',
+                'play_times' => [],
+            ]],
+        ];
+        $this->login();
+
+        $detail = $this->application->handle(new Request('GET', '/playlists/2'));
+
+        self::assertSame(200, $detail->status);
+        self::assertStringContainsString('SRF 3 - Der Morgen', $detail->body);
+        self::assertStringContainsString('src="/playlists/2/cover"', $detail->body);
+        self::assertStringContainsString('href="/"', $detail->body);
+        self::assertStringContainsString('data-dialog-target="play-history-42"', $detail->body);
+        self::assertStringContainsString('Test &lt;Song&gt;', $detail->body);
+        self::assertStringContainsString('status-pending', $detail->body);
+        self::assertStringContainsString('status-rejected', $detail->body);
         self::assertStringContainsString(
             '<time datetime="2026-08-01T12:34:00+02:00">01.08.2026, 12:34 Uhr</time>',
-            $dashboard->body,
+            $detail->body,
         );
+    }
+
+    public function testPlaylistDetailUsesNeutralCoverFallback(): void
+    {
+        $this->operations->playlistDetails[4] = [
+            'playlist' => [
+                'id' => 4,
+                'name' => 'Playlist ohne Cover',
+                'description' => 'Fallback testen.',
+                'cover_url' => null,
+            ],
+            'ranking' => [],
+        ];
+        $this->login();
+
+        $detail = $this->application->handle(new Request('GET', '/playlists/4'));
+
+        self::assertSame(200, $detail->status);
+        self::assertStringContainsString('playlist-cover-placeholder', $detail->body);
+        self::assertStringNotContainsString('src="/playlists/4/cover"', $detail->body);
+    }
+
+    public function testPlaylistCoverAndUnknownPlaylistResponses(): void
+    {
+        $this->operations->playlistCovers[2] = "\x89PNG\r\n";
+        $this->login();
+
+        $cover = $this->application->handle(new Request('GET', '/playlists/2/cover'));
+        self::assertSame(200, $cover->status);
+        self::assertSame('image/png', $cover->headers['Content-Type']);
+        self::assertSame("\x89PNG\r\n", $cover->body);
+
+        $missing = $this->application->handle(new Request('GET', '/playlists/999'));
+        self::assertSame(404, $missing->status);
+        self::assertStringContainsString('<!doctype html>', $missing->body);
+        self::assertStringContainsString('Seite nicht gefunden', $missing->body);
+
+        $invalid = $this->application->handle(new Request('GET', '/playlists/not-an-id'));
+        self::assertSame(404, $invalid->status);
+        self::assertStringContainsString('<!doctype html>', $invalid->body);
     }
 
     public function testFailedLoginHealthAndUnknownRoute(): void

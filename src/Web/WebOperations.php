@@ -9,6 +9,11 @@ interface WebOperations
     /** @return array<string, mixed> */
     public function dashboard(): array;
 
+    /** @return array<string, mixed>|null */
+    public function playlist(int $playlistId): ?array;
+
+    public function playlistCover(int $playlistId): ?string;
+
     /** @return array<string, mixed> */
     public function import(string $fromDate, string $toDate, string $trigger): array;
 

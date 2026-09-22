@@ -73,6 +73,23 @@ final class ApplicationFactory
         );
     }
 
+    public function playlistRepository(): PlaylistRepository
+    {
+        return new PlaylistRepository($this->connection());
+    }
+
+    /** @return array<string, string> */
+    public function playlistCoverPaths(): array
+    {
+        $coverDirectory = $this->projectRoot . '/resources/playlist-covers';
+
+        return [
+            'SRF 3 - Top 50' => $coverDirectory . '/top50.png',
+            'SRF 3 - Der Morgen' => $coverDirectory . '/der-morgen.png',
+            'SRF 3 - Schweizer Musiktag 2026' => $coverDirectory . '/schweizer-musiktag.png',
+        ];
+    }
+
     public function spotifyOAuth(): SpotifyOAuth
     {
         return new SpotifyOAuth(
@@ -105,7 +122,10 @@ final class ApplicationFactory
         $connection = $this->connection();
         $spotify = $this->spotifyClient();
         $coverLoader = new PngPlaylistCoverLoader();
-        $coverDirectory = $this->projectRoot . '/resources/playlist-covers';
+        $coverImages = [];
+        foreach ($this->playlistCoverPaths() as $playlistName => $coverPath) {
+            $coverImages[$playlistName] = $coverLoader->load($coverPath);
+        }
 
         return new PlaylistSyncService(
             $this->rankingService(),
@@ -115,18 +135,12 @@ final class ApplicationFactory
                 new SpotifyMatchRepository($connection),
             ),
             new SpotifyMatchRepository($connection),
-            new PlaylistRepository($connection),
+            $this->playlistRepository(),
             $spotify,
             new AdvisoryLock($connection),
             new JsonLogger($this->projectRoot . '/var/log/application.log'),
             new DateTimeZone('Europe/Zurich'),
-            [
-                'SRF 3 - Top 50' => $coverLoader->load($coverDirectory . '/top50.png'),
-                'SRF 3 - Der Morgen' => $coverLoader->load($coverDirectory . '/der-morgen.png'),
-                'SRF 3 - Schweizer Musiktag 2026' => $coverLoader->load(
-                    $coverDirectory . '/schweizer-musiktag.png',
-                ),
-            ],
+            $coverImages,
         );
     }
 
