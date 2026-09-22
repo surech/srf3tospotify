@@ -13,8 +13,10 @@
 ## Ranking Rules
 
 - Window: last `ranking_days` complete Europe/Zurich calendar days; default under A-003 is 30.
+- Optional fixed window: use persisted inclusive `fixed_from_utc` and exclusive `fixed_to_utc` boundaries instead of a rolling window.
 - Optional playlist policy: include weekdays only and constrain local play start time to an inclusive/exclusive minute range.
 - `SRF 3 - Der Morgen`: Monday through Friday, local minute `360` (06:00) inclusive through `600` (10:00) exclusive.
+- `SRF 3 - Schweizer Musiktag 2026`: `2026-09-17 03:00:00Z` inclusive through `2026-09-17 22:00:00Z` exclusive, equivalent to 05:00 through 24:00 Europe/Zurich.
 - Reconstruct each play's Swiss local weekday and time from UTC timestamp plus stored source offset, including daylight-saving changes.
 - Group by logical `song.id`, not raw title spelling from individual plays.
 - Sort by play count descending, latest play descending, normalized artist ascending, normalized title ascending.
