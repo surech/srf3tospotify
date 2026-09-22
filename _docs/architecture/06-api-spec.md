@@ -16,7 +16,9 @@ The web surface is a server-rendered owner dashboard. JSON responses are used fo
 | `GET` | `/login` | Public | Login form |
 | `POST` | `/login` | Public + CSRF | Verify owner password and rotate session ID |
 | `POST` | `/logout` | Session + CSRF | Destroy owner session |
-| `GET` | `/` | Session | Status, recent runs, ranking and unresolved matches |
+| `GET` | `/` | Session | Status, recent runs, configured playlists and unresolved matches |
+| `GET` | `/playlists/{playlistId}` | Session | Playlist metadata and current ranking using the playlist synchronization rules |
+| `GET` | `/playlists/{playlistId}/cover` | Session | Configured PNG cover; `404` when the playlist or cover is unavailable |
 | `POST` | `/actions/import` | Session + CSRF | Body: `from_date`, `to_date`; synchronous import result |
 | `POST` | `/actions/sync` | Session + CSRF | Build and synchronize all configured playlist rankings |
 | `POST` | `/matches/{songId}` | Session + CSRF | Body: Spotify track URL/ID or `rejected`; save manual override |
@@ -93,6 +95,7 @@ Top-level playlist identifiers and counts refer to the first configured playlist
 ```
 
 - Browser action validation errors return `422`.
+- Unknown or invalid playlist IDs return an HTML `404` page.
 - Authentication failures return `401`; authorization/CSRF failures return `403`.
 - Lock contention returns `409` with the active run correlation ID when available.
 - Upstream or database failures return `502` or `503`; internal stack traces remain in protected logs only.

@@ -122,6 +122,29 @@ final readonly class WebApplication
 
             return Response::html($this->renderer->render('dashboard', $data));
         }
+        if ($request->method === 'GET' && preg_match('~^/playlists/(\d+)/cover$~', $request->path, $matches) === 1) {
+            $cover = $this->operations->playlistCover((int) $matches[1]);
+            if ($cover === null) {
+                return $this->error($request, 404, 'NOT_FOUND', 'Seite nicht gefunden.');
+            }
+
+            return new Response(200, $cover, [
+                'Content-Type' => 'image/png',
+                'Cache-Control' => 'private, max-age=86400',
+            ]);
+        }
+        if ($request->method === 'GET' && preg_match('~^/playlists/(\d+)$~', $request->path, $matches) === 1) {
+            $data = $this->operations->playlist((int) $matches[1]);
+            if ($data === null) {
+                return $this->error($request, 404, 'NOT_FOUND', 'Seite nicht gefunden.');
+            }
+            $data['csrf'] = $this->csrf->token();
+
+            return Response::html($this->renderer->render('playlist', $data));
+        }
+        if ($request->method === 'GET' && str_starts_with($request->path, '/playlists/')) {
+            return $this->error($request, 404, 'NOT_FOUND', 'Seite nicht gefunden.');
+        }
         if ($request->method === 'POST' && $request->path === '/actions/import') {
             $this->requireCsrf($request);
             $result = $this->operations->import(

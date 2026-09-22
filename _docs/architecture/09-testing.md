@@ -22,6 +22,9 @@
 - Spotify candidate threshold and runner-up margin route ambiguous versions to review.
 - Manual Spotify override survives later matching and synchronization.
 - Desired playlist contains unique tracks in deterministic ranking order.
+- Dashboard lists every configured playlist alphabetically and uses a neutral fallback when no cover is mapped.
+- Playlist detail rankings use the same rolling or fixed time window, filters and track limit as synchronization.
+- Playlist detail and cover routes require the owner session; unknown playlist IDs return `404`.
 - Spotify `429` honors `Retry-After` and leaves a retryable run.
 - Secrets, access tokens and refresh tokens never appear in rendered pages or logs.
 
