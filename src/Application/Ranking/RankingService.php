@@ -23,8 +23,22 @@ final readonly class RankingService
         ?DateTimeImmutable $now = null,
         ?RankingFilter $filter = null,
     ): array {
-        $this->validateLimit($limit);
         [$fromUtc, $toUtcExclusive] = $this->window($days, $now);
+
+        return $this->topBetween($fromUtc, $toUtcExclusive, $limit, $filter);
+    }
+
+    /** @return list<RankingEntry> */
+    public function topBetween(
+        DateTimeImmutable $fromUtc,
+        DateTimeImmutable $toUtcExclusive,
+        int $limit = 50,
+        ?RankingFilter $filter = null,
+    ): array {
+        $this->validateLimit($limit);
+        if ($fromUtc >= $toUtcExclusive) {
+            throw new InvalidArgumentException('Ranking start must precede end.');
+        }
 
         return $this->repository->topSongs(
             $fromUtc,
@@ -62,7 +76,7 @@ final readonly class RankingService
     }
 
     /** @return array{DateTimeImmutable, DateTimeImmutable} */
-    private function window(int $days, ?DateTimeImmutable $now): array
+    public function window(int $days, ?DateTimeImmutable $now = null): array
     {
         if ($days < 1 || $days > 3660) {
             throw new InvalidArgumentException('Ranking days must be between 1 and 3660.');

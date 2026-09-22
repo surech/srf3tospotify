@@ -30,6 +30,7 @@ docker compose up -d --force-recreate --wait
 ```bash
 docker compose exec -T --user www-data app php bin/console diagnostics
 docker compose exec -T --user www-data app php bin/console import --from=2026-08-24 --to=2026-08-24
+docker compose exec -T --user www-data app php bin/console import --from=2026-09-17 --to=2026-09-17
 docker compose exec -T --user www-data app php bin/console ranking --days=30 --limit=50
 docker compose exec -T --user www-data app php bin/console sync
 docker compose exec -T --user www-data app php bin/console cleanup --days=90
@@ -54,12 +55,13 @@ docker compose exec -T app vendor/bin/phpunit --coverage-text --coverage-filter 
 Development Mode genügt für persönlichen Betrieb. Spotify verlangt aktuell ein Premium-Konto des App-Eigentümers.
 Nach einem Update von einer Version ohne Playlist-Cover **Spotify verbinden** erneut wählen, damit Spotify den zusätzlichen Bild-Upload-Scope freigibt.
 
-Der erste Sync erstellt zwei öffentliche Playlists. Bereits vorhandene Playlists werden beim nächsten Sync öffentlich geschaltet:
+Der erste Sync erstellt drei öffentliche Playlists. Bereits vorhandene Playlists werden beim nächsten Sync öffentlich geschaltet:
 
 - **SRF 3 - Top 50**: meistgespielte Songs der letzten 30 vollständigen Tage.
 - **SRF 3 - Der Morgen**: 50 meistgespielte Songs der letzten 30 vollständigen Tage, eingeschränkt auf Montag bis Freitag von 06:00 Uhr inklusive bis 10:00 Uhr exklusive in Schweizer Lokalzeit.
+- **SRF 3 - Schweizer Musiktag 2026**: alle eindeutigen Songs vom 17. September 2026, 05:00 Uhr inklusive bis 24:00 Uhr exklusive in Schweizer Lokalzeit.
 
-Bei jedem Sync lädt die Anwendung die Cover aus `resources/playlist-covers/top50.png` und `resources/playlist-covers/der-morgen.png` hoch.
+Vor dem ersten Sync der Musiktag-Playlist muss der 17. September 2026 einmal importiert werden. Bei jedem Sync lädt die Anwendung die drei PNG-Dateien aus `resources/playlist-covers/` als Cover hoch, einschliesslich `schweizer-musiktag.png`.
 
 ## Deployment
 

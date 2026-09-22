@@ -67,6 +67,7 @@ final class PlaylistSyncServiceTest extends TestCase
         $matchRepository = new SpotifyMatchRepository($this->connection);
         $top50Cover = "\xFF\xD8top-50-cover\xFF\xD9";
         $morningCover = "\xFF\xD8morning-cover\xFF\xD9";
+        $musiktagCover = "\xFF\xD8musiktag-cover\xFF\xD9";
         $service = new PlaylistSyncService(
             new RankingService(new RankingRepository($this->connection), new DateTimeZone('Europe/Zurich')),
             new MatchingService($spotify, new MatchingEngine(), $matchRepository),
@@ -79,6 +80,7 @@ final class PlaylistSyncServiceTest extends TestCase
             [
                 'SRF 3 - Top 50' => $top50Cover,
                 'SRF 3 - Der Morgen' => $morningCover,
+                'SRF 3 - Schweizer Musiktag 2026' => $musiktagCover,
             ],
         );
 
@@ -86,18 +88,23 @@ final class PlaylistSyncServiceTest extends TestCase
 
         self::assertSame(2, $result->trackCount);
         self::assertSame(0, $result->unresolvedCount);
-        self::assertSame(2, $result->playlistCount);
+        self::assertSame(3, $result->playlistCount);
         self::assertSame(2, $result->totalTrackCount);
         self::assertSame(0, $result->totalUnresolvedCount);
-        self::assertSame(2, $spotify->createdPlaylists);
-        self::assertSame(['SRF 3 - Top 50', 'SRF 3 - Der Morgen'], $spotify->createdPlaylistNames);
-        self::assertSame([true, true], $spotify->createdPlaylistPublicStates);
+        self::assertSame(3, $spotify->createdPlaylists);
+        self::assertSame([
+            'SRF 3 - Top 50',
+            'SRF 3 - Der Morgen',
+            'SRF 3 - Schweizer Musiktag 2026',
+        ], $spotify->createdPlaylistNames);
+        self::assertSame([true, true, true], $spotify->createdPlaylistPublicStates);
         self::assertSame([
             ['playlist_id' => 'fake-playlist-id', 'jpeg' => $top50Cover],
             ['playlist_id' => 'fake-playlist-id-2', 'jpeg' => $morningCover],
+            ['playlist_id' => 'fake-playlist-id-3', 'jpeg' => $musiktagCover],
         ], $spotify->coverUploads);
         $configurations = (new PlaylistRepository($this->connection))->configurations();
-        self::assertCount(2, $configurations);
+        self::assertCount(3, $configurations);
         self::assertSame('SRF 3 - Der Morgen', $configurations[1]->name);
         self::assertSame(30, $configurations[1]->rankingDays);
         self::assertSame(50, $configurations[1]->maxTracks);
@@ -105,22 +112,28 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertSame(360, $configurations[1]->rankingFilter->localStartMinute);
         self::assertSame(600, $configurations[1]->rankingFilter->localEndMinute);
         self::assertTrue($configurations[1]->public);
+        self::assertSame('SRF 3 - Schweizer Musiktag 2026', $configurations[2]->name);
+        self::assertSame(500, $configurations[2]->maxTracks);
+        self::assertSame('2026-09-17T03:00:00+00:00', $configurations[2]->fixedFromUtc?->format(DATE_ATOM));
+        self::assertSame('2026-09-17T22:00:00+00:00', $configurations[2]->fixedToUtcExclusive?->format(DATE_ATOM));
         self::assertSame([
             'spotify:track:track000001',
             'spotify:track:track000002',
         ], $spotify->replacements[0]);
         self::assertSame([], $spotify->replacements[1]);
+        self::assertSame([], $spotify->replacements[2]);
         self::assertSame(2, (int) $this->fetchValue('SELECT COUNT(*) FROM sync_run_items'));
-        self::assertSame(2, (int) $this->fetchValue('SELECT COUNT(*) FROM sync_runs'));
+        self::assertSame(3, (int) $this->fetchValue('SELECT COUNT(*) FROM sync_runs'));
         self::assertSame(
             'fake-playlist-id',
             $this->fetchValue('SELECT spotify_playlist_id FROM playlists ORDER BY id LIMIT 1'),
         );
         $lines = file($this->syncLogPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         self::assertIsArray($lines);
-        self::assertCount(2, $lines);
+        self::assertCount(3, $lines);
         $top50Record = json_decode($lines[0], true, 32, JSON_THROW_ON_ERROR);
         $morningRecord = json_decode($lines[1], true, 32, JSON_THROW_ON_ERROR);
+        $musiktagRecord = json_decode($lines[2], true, 32, JSON_THROW_ON_ERROR);
         self::assertSame('spotify.sync.succeeded', $top50Record['event']);
         self::assertSame('succeeded', $top50Record['context']['status']);
         self::assertSame($result->correlationId, $top50Record['context']['correlation_id']);
@@ -128,6 +141,8 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertSame('SRF 3 - Der Morgen', $morningRecord['context']['name']);
         self::assertSame(0, $morningRecord['context']['track_count']);
         self::assertIsInt($morningRecord['context']['duration_ms']);
+        self::assertSame('SRF 3 - Schweizer Musiktag 2026', $musiktagRecord['context']['name']);
+        self::assertSame(0, $musiktagRecord['context']['track_count']);
     }
 
     public function testSynchronizesFilteredRankingToMorningPlaylist(): void
@@ -164,7 +179,7 @@ final class PlaylistSyncServiceTest extends TestCase
 
         $result = $service->synchronize('manual', $now);
 
-        self::assertSame(2, $result->playlistCount);
+        self::assertSame(3, $result->playlistCount);
         self::assertSame(3, $result->trackCount);
         self::assertSame(4, $result->totalTrackCount);
         self::assertSame([
@@ -174,6 +189,7 @@ final class PlaylistSyncServiceTest extends TestCase
                 'spotify:track:track000001',
             ],
             ['spotify:track:track000001'],
+            [],
         ], $spotify->replacements);
         self::assertSame('SRF 3 - Der Morgen', $result->playlists[1]->name);
         self::assertSame(1, $result->playlists[1]->trackCount);
@@ -181,7 +197,7 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertSame(3, $serialized['track_count']);
         self::assertSame(4, $serialized['total_track_count']);
         self::assertIsArray($serialized['playlists']);
-        self::assertCount(2, $serialized['playlists']);
+        self::assertCount(3, $serialized['playlists']);
         $serializedMorning = $serialized['playlists'][1];
         self::assertSame('SRF 3 - Der Morgen', $serializedMorning['name']);
     }
@@ -192,6 +208,7 @@ final class PlaylistSyncServiceTest extends TestCase
             "UPDATE playlists SET spotify_playlist_id = CASE name
                 WHEN 'SRF 3 - Top 50' THEN 'existing-top-50'
                 WHEN 'SRF 3 - Der Morgen' THEN 'existing-morning'
+                WHEN 'SRF 3 - Schweizer Musiktag 2026' THEN 'existing-musiktag'
              END, spotify_owner_id = 'fake-owner-id'",
         );
         $spotify = new FakeSpotifyGateway();
@@ -210,11 +227,66 @@ final class PlaylistSyncServiceTest extends TestCase
         $service->synchronize('manual', new DateTimeImmutable('2020-01-03T12:00:00+01:00'));
 
         self::assertSame(0, $spotify->createdPlaylists);
-        self::assertSame(['existing-top-50', 'existing-morning'], $spotify->playlistExistenceChecks);
+        self::assertSame([
+            'existing-top-50',
+            'existing-morning',
+            'existing-musiktag',
+        ], $spotify->playlistExistenceChecks);
         self::assertSame([
             ['playlist_id' => 'existing-top-50', 'public' => true],
             ['playlist_id' => 'existing-morning', 'public' => true],
+            ['playlist_id' => 'existing-musiktag', 'public' => true],
         ], $spotify->visibilityUpdates);
+    }
+
+    public function testSynchronizesSchweizerMusiktagWithinFixedSwissWindow(): void
+    {
+        $now = new DateTimeImmutable('2026-09-22T12:00:00+02:00');
+        $this->importPlays([
+            $this->play('2026-09-17T02:59:59Z', 'Artist Before', 'Before Window', 120),
+            $this->play('2026-09-17T03:00:00Z', 'Artist Opening', 'Opening Song', 120),
+            $this->play('2026-09-17T21:59:59Z', 'Artist Closing', 'Closing Song', 120),
+            $this->play('2026-09-17T22:00:00Z', 'Artist After', 'After Window', 120),
+        ], '2026-09-17', '2026-09-17', $now);
+        $spotify = new FakeSpotifyGateway();
+        $spotify->searchResults = [
+            'Before Window|Artist Before' => [$this->track('track-before', 'Before Window', 'Artist Before')],
+            'Opening Song|Artist Opening' => [$this->track('track-opening', 'Opening Song', 'Artist Opening')],
+            'Closing Song|Artist Closing' => [$this->track('track-closing', 'Closing Song', 'Artist Closing')],
+            'After Window|Artist After' => [$this->track('track-after', 'After Window', 'Artist After')],
+        ];
+        $matchRepository = new SpotifyMatchRepository($this->connection);
+        $service = new PlaylistSyncService(
+            new RankingService(new RankingRepository($this->connection), new DateTimeZone('Europe/Zurich')),
+            new MatchingService($spotify, new MatchingEngine(), $matchRepository),
+            $matchRepository,
+            new PlaylistRepository($this->connection),
+            $spotify,
+            new AdvisoryLock($this->connection),
+            new JsonLogger($this->syncLogPath),
+            new DateTimeZone('Europe/Zurich'),
+        );
+
+        $result = $service->synchronize('manual', $now);
+
+        self::assertSame(3, $result->playlistCount);
+        self::assertSame('SRF 3 - Schweizer Musiktag 2026', $result->playlists[2]->name);
+        self::assertSame(2, $result->playlists[2]->trackCount);
+        self::assertSame([
+            'spotify:track:track-closing',
+            'spotify:track:track-opening',
+        ], $spotify->replacements[2]);
+        $query = $this->connection->query(
+            "SELECT sr.window_from_utc, sr.window_to_utc
+             FROM sync_runs sr
+             INNER JOIN playlists p ON p.id = sr.playlist_id
+             WHERE p.name = 'SRF 3 - Schweizer Musiktag 2026'",
+        );
+        self::assertNotFalse($query);
+        self::assertSame([
+            'window_from_utc' => '2026-09-17 03:00:00.000000',
+            'window_to_utc' => '2026-09-17 22:00:00.000000',
+        ], $query->fetch(PDO::FETCH_ASSOC));
     }
 
     public function testRecreatesDeletedConfiguredPlaylist(): void
@@ -246,9 +318,13 @@ final class PlaylistSyncServiceTest extends TestCase
         $result = $service->synchronize('manual', $now);
 
         self::assertSame(['deleted-playlist-id'], $spotify->playlistExistenceChecks);
-        self::assertSame(2, $spotify->createdPlaylists);
+        self::assertSame(3, $spotify->createdPlaylists);
         self::assertSame('fake-playlist-id', $result->playlistId);
-        self::assertSame(['fake-playlist-id', 'fake-playlist-id-2'], $spotify->replacementPlaylistIds);
+        self::assertSame([
+            'fake-playlist-id',
+            'fake-playlist-id-2',
+            'fake-playlist-id-3',
+        ], $spotify->replacementPlaylistIds);
         self::assertSame(
             'fake-playlist-id',
             $this->fetchValue('SELECT spotify_playlist_id FROM playlists ORDER BY id LIMIT 1'),
@@ -284,7 +360,11 @@ final class PlaylistSyncServiceTest extends TestCase
             self::assertSame('Top 50 write failed.', $exception->getMessage());
         }
 
-        self::assertSame(['fake-playlist-id', 'fake-playlist-id-2'], $spotify->replacementPlaylistIds);
+        self::assertSame([
+            'fake-playlist-id',
+            'fake-playlist-id-2',
+            'fake-playlist-id-3',
+        ], $spotify->replacementPlaylistIds);
         $query = $this->connection->query(
             'SELECT p.name, sr.status FROM sync_runs sr INNER JOIN playlists p ON p.id = sr.playlist_id ORDER BY p.id',
         );
@@ -292,6 +372,7 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertSame([
             ['name' => 'SRF 3 - Top 50', 'status' => 'failed'],
             ['name' => 'SRF 3 - Der Morgen', 'status' => 'succeeded'],
+            ['name' => 'SRF 3 - Schweizer Musiktag 2026', 'status' => 'succeeded'],
         ], $query->fetchAll(PDO::FETCH_ASSOC));
     }
 
@@ -363,11 +444,15 @@ final class PlaylistSyncServiceTest extends TestCase
         ))->import($fromDate, $toDate, 'manual', $now);
     }
 
-    private function play(string $date, string $artist, string $title): RadioPlay
-    {
+    private function play(
+        string $date,
+        string $artist,
+        string $title,
+        int $sourceOffsetMinutes = 60,
+    ): RadioPlay {
         return new RadioPlay(
             new DateTimeImmutable($date, new DateTimeZone('UTC')),
-            60,
+            $sourceOffsetMinutes,
             180_000,
             $artist,
             $title,
@@ -396,11 +481,15 @@ final class PlaylistSyncServiceTest extends TestCase
         $this->connection->exec('DELETE FROM sync_runs');
         $this->connection->exec('DELETE FROM spotify_matches');
         $this->connection->exec("DELETE FROM plays WHERE played_at_utc >= '2020-01-01' AND played_at_utc < '2020-01-06'");
+        $this->connection->exec("DELETE FROM plays WHERE played_at_utc >= '2026-09-17' AND played_at_utc < '2026-09-18'");
         $this->connection->exec("DELETE FROM import_runs WHERE range_from_utc >= '2019-12-31' AND range_from_utc < '2020-01-06'");
+        $this->connection->exec("DELETE FROM import_runs WHERE range_from_utc >= '2026-09-16' AND range_from_utc < '2026-09-19'");
         $this->connection->exec('DELETE FROM songs WHERE NOT EXISTS (SELECT 1 FROM plays WHERE plays.song_id = songs.id)');
         $this->connection->exec(
             "UPDATE playlists SET spotify_playlist_id = NULL, spotify_owner_id = NULL,
-               ranking_days = 30, max_tracks = 50, is_public = 1",
+             ranking_days = CASE WHEN name = 'SRF 3 - Schweizer Musiktag 2026' THEN 1 ELSE 30 END,
+             max_tracks = CASE WHEN name = 'SRF 3 - Schweizer Musiktag 2026' THEN 500 ELSE 50 END,
+             is_public = 1",
         );
     }
 }

@@ -75,23 +75,27 @@ final readonly class PlaylistSyncService
         $correlationId = Uuid::v4();
         $runId = null;
         try {
-            $toLocal = $effectiveNow
-                ->setTimezone($this->timezone)
-                ->setTime(0, 0);
-            $fromLocal = $toLocal->modify(\sprintf('-%d days', $configuration->rankingDays));
-            $utc = new DateTimeZone('UTC');
+            if ($configuration->fixedFromUtc !== null && $configuration->fixedToUtcExclusive !== null) {
+                $fromUtc = $configuration->fixedFromUtc;
+                $toUtcExclusive = $configuration->fixedToUtcExclusive;
+            } else {
+                [$fromUtc, $toUtcExclusive] = $this->rankingService->window(
+                    $configuration->rankingDays,
+                    $effectiveNow,
+                );
+            }
             $runId = $this->playlistRepository->startRun(
                 $configuration->id,
                 $correlationId,
                 $triggerType,
-                $fromLocal->setTimezone($utc),
-                $toLocal->setTimezone($utc),
+                $fromUtc,
+                $toUtcExclusive,
             );
 
-            $ranking = $this->rankingService->top(
-                $configuration->rankingDays,
+            $ranking = $this->rankingService->topBetween(
+                $fromUtc,
+                $toUtcExclusive,
                 $configuration->maxTracks,
-                $effectiveNow,
                 $configuration->rankingFilter,
             );
             foreach ($ranking as $entry) {

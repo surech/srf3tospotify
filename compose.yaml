@@ -13,7 +13,7 @@ services:
     environment:
       APP_ENV: development
       APP_KEY: ${APP_KEY:-local-development-key-change-before-production}
-      APP_URL: ${APP_URL:-http://localhost:8080}
+      APP_URL: http://127.0.0.1:${APP_PORT:-8080}
       DB_HOST: database
       DB_PORT: 3306
       DB_NAME: ${DB_NAME:-srf3spotify}

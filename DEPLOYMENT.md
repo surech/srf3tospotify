@@ -93,9 +93,10 @@ Danach Dashboard anmelden, einen vergangenen Tag importieren, denselben Tag erne
 - Callback im Spotify Dashboard: `https://DEINE-DOMAIN/spotify/callback`
 - Dashboard-Aktion **Spotify verbinden**
 - Nach einem Update von einer Version ohne Playlist-Cover **Spotify verbinden** erneut ausführen, um `ugc-image-upload` freizugeben
-- Playlists **SRF 3 - Top 50** und **SRF 3 - Der Morgen** werden beim ersten Sync erstellt
-- Jeder Sync lädt `resources/playlist-covers/top50.png` und `resources/playlist-covers/der-morgen.png` als Cover hoch
-- Beide Playlists bleiben privat und verwenden die letzten 30 vollständigen Tage; **Der Morgen** berücksichtigt Montag bis Freitag von 06:00 Uhr inklusive bis 10:00 Uhr exklusive in Schweizer Lokalzeit
+- Playlists **SRF 3 - Top 50**, **SRF 3 - Der Morgen** und **SRF 3 - Schweizer Musiktag 2026** werden beim ersten Sync erstellt
+- Vor dem ersten Sync einmal `php bin/console import --from=2026-09-17 --to=2026-09-17` ausführen
+- Jeder Sync lädt die drei PNG-Dateien aus `resources/playlist-covers/` als Cover hoch
+- Alle Playlists sind öffentlich; **Der Morgen** verwendet Montag bis Freitag von 06:00 Uhr inklusive bis 10:00 Uhr exklusive, **Schweizer Musiktag 2026** den 17.09.2026 von 05:00 Uhr inklusive bis 24:00 Uhr exklusive in Schweizer Lokalzeit
 
 ## 8. Automatisierung
 

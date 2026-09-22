@@ -7,6 +7,7 @@ namespace App\Infrastructure\Database;
 use App\Application\Ranking\RankingEntry;
 use App\Application\Ranking\RankingFilter;
 use DateTimeImmutable;
+use DateTimeZone;
 use PDO;
 use RuntimeException;
 use Throwable;
@@ -25,7 +26,8 @@ final readonly class PlaylistRepository
     {
         $query = $this->connection->query(
             'SELECT id, spotify_playlist_id, spotify_owner_id, name, description, ranking_days, max_tracks, '
-            . 'weekdays_only, local_start_minute, local_end_minute, is_public FROM playlists ORDER BY id',
+            . 'weekdays_only, local_start_minute, local_end_minute, is_public, fixed_from_utc, fixed_to_utc '
+            . 'FROM playlists ORDER BY id',
         );
         $rows = $query === false ? [] : $query->fetchAll();
         if ($rows === []) {
@@ -47,6 +49,12 @@ final readonly class PlaylistRepository
                     $row['local_end_minute'] === null ? null : (int) $row['local_end_minute'],
                 ),
                 (bool) $row['is_public'],
+                $row['fixed_from_utc'] === null
+                    ? null
+                    : new DateTimeImmutable((string) $row['fixed_from_utc'], new DateTimeZone('UTC')),
+                $row['fixed_to_utc'] === null
+                    ? null
+                    : new DateTimeImmutable((string) $row['fixed_to_utc'], new DateTimeZone('UTC')),
             ),
             $rows,
         ));

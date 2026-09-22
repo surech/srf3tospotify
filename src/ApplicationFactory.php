@@ -123,6 +123,9 @@ final class ApplicationFactory
             [
                 'SRF 3 - Top 50' => $coverLoader->load($coverDirectory . '/top50.png'),
                 'SRF 3 - Der Morgen' => $coverLoader->load($coverDirectory . '/der-morgen.png'),
+                'SRF 3 - Schweizer Musiktag 2026' => $coverLoader->load(
+                    $coverDirectory . '/schweizer-musiktag.png',
+                ),
             ],
         );
     }

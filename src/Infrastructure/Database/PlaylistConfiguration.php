@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Infrastructure\Database;
 
 use App\Application\Ranking\RankingFilter;
+use DateTimeImmutable;
+use InvalidArgumentException;
 
 final readonly class PlaylistConfiguration
 {
@@ -18,5 +20,14 @@ final readonly class PlaylistConfiguration
         public int $maxTracks,
         public RankingFilter $rankingFilter,
         public bool $public,
-    ) {}
+        public ?DateTimeImmutable $fixedFromUtc = null,
+        public ?DateTimeImmutable $fixedToUtcExclusive = null,
+    ) {
+        if (($fixedFromUtc === null) !== ($fixedToUtcExclusive === null)) {
+            throw new InvalidArgumentException('Fixed ranking start and end must be configured together.');
+        }
+        if ($fixedFromUtc !== null && $fixedToUtcExclusive !== null && $fixedFromUtc >= $fixedToUtcExclusive) {
+            throw new InvalidArgumentException('Fixed ranking start must precede end.');
+        }
+    }
 }
