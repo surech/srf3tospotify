@@ -97,6 +97,7 @@ input:hover { border-color: #7b838d; }
 .playlist-detail-copy h1 { margin-top: 12px; overflow-wrap: anywhere; }
 .playlist-description { max-width: 760px; margin: 15px 0 0; color: var(--muted); font-size: 16px; }
 .back-link { color: var(--focus); font-size: 13px; font-weight: 750; text-underline-offset: 3px; }
+.playlist-entry-count { margin-bottom: 10px; text-align: right; }
 
 .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 table { width: 100%; border-collapse: collapse; }

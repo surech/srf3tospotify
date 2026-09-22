@@ -313,6 +313,8 @@ final class WebApplicationTest extends TestCase
         self::assertStringContainsString('SRF 3 - Der Morgen', $detail->body);
         self::assertStringContainsString('src="/playlists/2/cover"', $detail->body);
         self::assertStringContainsString('href="/"', $detail->body);
+        self::assertStringNotContainsString('Aktuelles Ranking', $detail->body);
+        self::assertStringNotContainsString('Meistgespielte Songs', $detail->body);
         self::assertStringContainsString('data-dialog-target="play-history-42"', $detail->body);
         self::assertStringContainsString('Test &lt;Song&gt;', $detail->body);
         self::assertStringContainsString('status-pending', $detail->body);

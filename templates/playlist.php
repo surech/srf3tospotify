@@ -43,11 +43,8 @@ $ranking = is_array($ranking ?? null) ? $ranking : [];
     </section>
 
     <div class="page-width content-stack">
-      <section aria-labelledby="ranking-title">
-        <div class="section-heading">
-          <div><p class="eyebrow">Aktuelles Ranking</p><h2 id="ranking-title">Meistgespielte Songs</h2></div>
-          <span class="count-label"><?= $escape(count($ranking)) ?> Einträge</span>
-        </div>
+      <section aria-label="Songs der Playlist">
+        <p class="count-label playlist-entry-count"><?= $escape(count($ranking)) ?> Einträge</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>#</th><th>Song</th><th>Künstler</th><th>Spiele</th><th>Spotify</th></tr></thead>
