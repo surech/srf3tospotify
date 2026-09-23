@@ -23,6 +23,7 @@
 | Static analysis | PHPStan | Compensates for PHP runtime typing gaps and helps a Java-oriented maintainer |
 | Formatting | PHP-CS-Fixer with PSR-12 baseline | Deterministic style and low review noise |
 | Database tests | Dedicated MariaDB container | Tests real SQL, collation, constraints and advisory locking |
+| Browser-logic tests | Node.js built-in test runner | Dependency-free coverage for search and native-dialog behavior |
 
 ## Release Artifact
 

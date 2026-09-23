@@ -18,7 +18,7 @@ final class FakeSpotifyGateway implements SpotifyGateway
     /** @var array<string, SpotifyTrack> */
     public array $tracks = [];
 
-    /** @var list<array{title: string, artist: string}> */
+    /** @var list<array{title: string, artist: string, offset: int}> */
     public array $searches = [];
 
     /** @var list<list<string>> */
@@ -50,9 +50,9 @@ final class FakeSpotifyGateway implements SpotifyGateway
 
     public int $createdPlaylists = 0;
 
-    public function searchTracks(string $title, string $artist): array
+    public function searchTracks(string $title, string $artist, int $offset = 0): array
     {
-        $this->searches[] = compact('title', 'artist');
+        $this->searches[] = compact('title', 'artist', 'offset');
 
         return $this->searchResults[$title . '|' . $artist] ?? [];
     }

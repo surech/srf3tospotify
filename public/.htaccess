@@ -1,5 +1,6 @@
 DirectoryIndex index.php
 Options -Indexes
+AddType application/javascript .mjs
 Require all granted
 SetEnvIf Authorization "(.+)" HTTP_AUTHORIZATION=$1
 

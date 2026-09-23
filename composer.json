@@ -31,12 +31,14 @@
   },
   "scripts": {
     "test": "phpunit",
+    "test:js": "node --experimental-test-coverage --test tests/JavaScript/*.test.mjs",
     "analyse": "phpstan analyse",
     "format:check": "php-cs-fixer fix --dry-run --diff",
     "release": "sh bin/build-release",
     "quality": [
       "@format:check",
       "@analyse",
+      "@test:js",
       "@test"
     ]
   },

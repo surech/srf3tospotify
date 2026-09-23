@@ -15,7 +15,8 @@ final readonly class SpotifyMatchRepository
     public function find(int $songId): ?StoredSpotifyMatch
     {
         $query = $this->connection->prepare(
-            'SELECT id, song_id, spotify_track_id, spotify_uri, match_source, status, confidence '
+            'SELECT id, song_id, spotify_track_id, spotify_uri, match_source, status, confidence, '
+            . 'spotify_title, spotify_artist, duration_ms '
             . 'FROM spotify_matches WHERE song_id = :song_id',
         );
         $query->execute(['song_id' => $songId]);
@@ -27,15 +28,16 @@ final readonly class SpotifyMatchRepository
     /** @param list<int> $songIds
      *  @return array<int, StoredSpotifyMatch>
      */
-    public function findAccepted(array $songIds): array
+    public function findBySongIds(array $songIds): array
     {
         if ($songIds === []) {
             return [];
         }
         $placeholders = implode(', ', array_fill(0, \count($songIds), '?'));
         $query = $this->connection->prepare(
-            'SELECT id, song_id, spotify_track_id, spotify_uri, match_source, status, confidence '
-            . "FROM spotify_matches WHERE status = 'accepted' AND song_id IN ($placeholders)",
+            'SELECT id, song_id, spotify_track_id, spotify_uri, match_source, status, confidence, '
+            . 'spotify_title, spotify_artist, duration_ms '
+            . "FROM spotify_matches WHERE song_id IN ($placeholders)",
         );
         $query->execute($songIds);
 
@@ -67,11 +69,11 @@ final readonly class SpotifyMatchRepository
         return $this->find($songId) ?? throw new \RuntimeException('Unable to reload manual Spotify match.');
     }
 
-    public function saveManualRejection(int $songId): StoredSpotifyMatch
+    public function saveManualReview(int $songId): StoredSpotifyMatch
     {
-        $this->upsert($songId, null, 'manual', 'rejected', null);
+        $this->upsert($songId, null, 'manual', 'review', null);
 
-        return $this->find($songId) ?? throw new \RuntimeException('Unable to reload rejected Spotify match.');
+        return $this->find($songId) ?? throw new \RuntimeException('Unable to reload reset Spotify match.');
     }
 
     private function upsert(
@@ -125,6 +127,9 @@ final readonly class SpotifyMatchRepository
             (string) $row['match_source'],
             (string) $row['status'],
             $row['confidence'] === null ? null : (float) $row['confidence'],
+            $row['spotify_title'] === null ? null : (string) $row['spotify_title'],
+            $row['spotify_artist'] === null ? null : (string) $row['spotify_artist'],
+            $row['duration_ms'] === null ? null : (int) $row['duration_ms'],
         );
     }
 }

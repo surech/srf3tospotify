@@ -22,7 +22,7 @@ Playlist synchronization first stores an ordered desired snapshot and then recon
 
 ## Cached Matching with Human Override
 
-Spotify search runs once per logical song unless reset. Automatic confidence controls acceptance; manual selection or rejection has precedence and survives later syncs.
+Automatic Spotify search runs once per logical song unless it remains unresolved. Automatic confidence controls acceptance. Manual selection has precedence and survives later syncs; a trackless manual review state prevents automatic reassignment. Permanent exclusion uses the historized ignore-rule model instead of a second rejection mechanism.
 
 ## Advisory Lock per Operation
 

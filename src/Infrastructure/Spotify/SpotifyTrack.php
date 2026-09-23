@@ -13,6 +13,10 @@ final readonly class SpotifyTrack
         public string $title,
         public array $artists,
         public int $durationMs,
+        public ?string $album = null,
+        public ?string $releaseYear = null,
+        public ?string $imageUrl = null,
+        public ?string $externalUrl = null,
     ) {
         if ($id === '' || $uri === '' || $title === '' || $artists === [] || $durationMs < 0) {
             throw new SpotifyException('Spotify track is incomplete.');

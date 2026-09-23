@@ -113,17 +113,19 @@ $recentSyncs = is_array($recent_syncs ?? null) ? $recent_syncs : [];
               <strong><?= $escape($match['title'] ?? '') ?></strong>
               <span><?= $escape($match['artist'] ?? '') ?> · <?= $escape($match['play_count'] ?? 0) ?> Spiele</span>
             </div>
-            <form method="post" action="/matches/<?= $escape($match['song_id'] ?? '') ?>" class="match-form">
-              <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
-              <label class="visually-hidden" for="track-<?= $escape($match['song_id'] ?? '') ?>">Spotify-Track</label>
-              <input id="track-<?= $escape($match['song_id'] ?? '') ?>" name="track" placeholder="Spotify-URL oder Track-ID" required>
-              <button type="submit" class="button button-secondary">Zuordnen</button>
-              <button type="submit" name="action" value="reject" class="button button-quiet" formnovalidate>Ablehnen</button>
-            </form>
+            <button
+              type="button"
+              class="button button-secondary match-dialog-trigger"
+              data-dialog-target="spotify-match-<?= $escape($match['song_id'] ?? '') ?>"
+              aria-haspopup="dialog"
+            >Zuordnen</button>
           </article>
         <?php endforeach; ?>
         <?php if ($unresolvedMatches === []): ?><p class="empty-state">Keine offenen Zuordnungen.</p><?php endif; ?>
         </div>
+        <?php foreach ($unresolvedMatches as $entry): ?>
+          <?php $returnTo = '/'; require __DIR__ . '/_spotify-match-dialog.php'; ?>
+        <?php endforeach; ?>
       </section>
 
       <section class="runs-grid" aria-label="Letzte Abläufe">

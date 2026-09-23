@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
+use App\Application\Spotify\SongIgnoreService;
 use App\Infrastructure\Database\ConnectionFactory;
 use App\Infrastructure\Database\Migrator;
+use App\Infrastructure\Database\SongIgnoreRepository;
 use App\Support\Config;
 use PDO;
 use PHPUnit\Framework\Attributes\CoversClass;
@@ -108,6 +110,70 @@ final class MigratorTest extends TestCase
         }
     }
 
+    public function testMigratesManualRejectionsToGlobalIgnoreAndManualReviewIdempotently(): void
+    {
+        $migrator = new Migrator($this->connection, \dirname(__DIR__, 2) . '/database/migrations');
+        $migrator->migrate();
+        $songId = $this->createSong();
+        $matchId = $this->createRejectedMatch($songId);
+
+        try {
+            $this->connection->exec(
+                "DELETE FROM schema_migrations WHERE version = '010_rejected_matches_to_global_ignores'",
+            );
+
+            $result = $migrator->migrate();
+
+            self::assertContains('010_rejected_matches_to_global_ignores', $result['applied']);
+            $rules = $this->connection->prepare(
+                'SELECT id, reason FROM song_ignore_rules '
+                . 'WHERE song_id = :song_id AND playlist_id IS NULL AND reactivated_at IS NULL',
+            );
+            $rules->execute(['song_id' => $songId]);
+            $rule = $rules->fetch(PDO::FETCH_ASSOC);
+            self::assertIsArray($rule);
+            self::assertSame('Manuell abgelehnt (Migration)', $rule['reason']);
+
+            $match = $this->connection->prepare(
+                'SELECT spotify_track_id, spotify_uri, spotify_title, spotify_artist, duration_ms, '
+                . 'match_source, confidence, status FROM spotify_matches WHERE id = :id',
+            );
+            $match->execute(['id' => $matchId]);
+            self::assertSame([
+                'spotify_track_id' => null,
+                'spotify_uri' => null,
+                'spotify_title' => null,
+                'spotify_artist' => null,
+                'duration_ms' => null,
+                'match_source' => 'manual',
+                'confidence' => null,
+                'status' => 'review',
+            ], $match->fetch(PDO::FETCH_ASSOC));
+
+            (new SongIgnoreService(new SongIgnoreRepository($this->connection)))->reactivate((int) $rule['id']);
+            $match->execute(['id' => $matchId]);
+            self::assertSame('review', $match->fetch(PDO::FETCH_ASSOC)['status']);
+
+            $this->connection->prepare("UPDATE spotify_matches SET status = 'rejected' WHERE id = :id")
+                ->execute(['id' => $matchId]);
+            $this->connection->exec(
+                "DELETE FROM schema_migrations WHERE version = '010_rejected_matches_to_global_ignores'",
+            );
+            $migrator->migrate();
+
+            $rules->execute(['song_id' => $songId]);
+            self::assertCount(1, $rules->fetchAll(PDO::FETCH_ASSOC));
+            $match->execute(['id' => $matchId]);
+            self::assertSame('review', $match->fetch(PDO::FETCH_ASSOC)['status']);
+        } finally {
+            $this->connection->prepare('DELETE FROM song_ignore_rules WHERE song_id = :song_id')
+                ->execute(['song_id' => $songId]);
+            $this->connection->prepare('DELETE FROM spotify_matches WHERE id = :id')->execute(['id' => $matchId]);
+            $this->connection->prepare('DELETE FROM songs WHERE id = :id')->execute(['id' => $songId]);
+            $migrator->migrate();
+        }
+    }
+
     private function createSong(): int
     {
         $query = $this->connection->prepare(
@@ -124,6 +190,24 @@ final class MigratorTest extends TestCase
         $query = $this->connection->prepare(
             "INSERT INTO spotify_matches (song_id, spotify_track_id, spotify_uri, match_source, status) "
             . "VALUES (:song_id, 'migration-track', 'spotify:track:migration-track', 'manual', 'accepted')",
+        );
+        $query->execute(['song_id' => $songId]);
+
+        return (int) $this->connection->lastInsertId();
+    }
+
+    private function createRejectedMatch(int $songId): int
+    {
+        $query = $this->connection->prepare(
+            <<<'SQL'
+                INSERT INTO spotify_matches (
+                    song_id, spotify_track_id, spotify_uri, spotify_title, spotify_artist,
+                    duration_ms, match_source, confidence, status
+                ) VALUES (
+                    :song_id, 'rejected-track', 'spotify:track:rejected-track', 'Rejected Song',
+                    'Rejected Artist', 180000, 'manual', 1.0000, 'rejected'
+                )
+                SQL,
         );
         $query->execute(['song_id' => $songId]);
 

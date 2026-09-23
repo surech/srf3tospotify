@@ -7,7 +7,7 @@ namespace App\Infrastructure\Spotify;
 interface SpotifyGateway
 {
     /** @return list<SpotifyTrack> */
-    public function searchTracks(string $title, string $artist): array;
+    public function searchTracks(string $title, string $artist, int $offset = 0): array;
 
     public function getTrack(string $trackId): SpotifyTrack;
 

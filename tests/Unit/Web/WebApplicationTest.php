@@ -56,6 +56,64 @@ final class WebApplicationTest extends TestCase
         self::assertSame('/login', $response->headers['Location']);
     }
 
+    public function testSpotifyTrackSearchRequiresAuthenticationAndReturnsJson(): void
+    {
+        $unauthorized = $this->application->handle(new Request('GET', '/spotify/tracks/search', [
+            'artist' => 'Artist',
+        ]));
+        self::assertSame(401, $unauthorized->status);
+        self::assertSame('application/problem+json; charset=utf-8', $unauthorized->headers['Content-Type']);
+
+        $this->login();
+        $this->operations->spotifySearchResult = [
+            'items' => [['id' => 'track000001', 'title' => 'Song']],
+            'offset' => 10,
+            'limit' => 10,
+            'has_more' => true,
+        ];
+
+        $response = $this->application->handle(new Request('GET', '/spotify/tracks/search', [
+            'title' => 'Song',
+            'artist' => 'Artist',
+            'offset' => '10',
+        ]));
+
+        self::assertSame(200, $response->status);
+        self::assertSame('application/json; charset=utf-8', $response->headers['Content-Type']);
+        self::assertSame($this->operations->spotifySearchResult, json_decode($response->body, true));
+        self::assertSame([
+            ['title' => 'Song', 'artist' => 'Artist', 'offset' => '10'],
+        ], $this->operations->spotifySearches);
+    }
+
+    public function testSpotifyTrackSearchErrorsUseProblemJson(): void
+    {
+        $this->login();
+
+        $this->operations->spotifySearchException = new \InvalidArgumentException('invalid search');
+        $invalid = $this->application->handle(new Request('GET', '/spotify/tracks/search'));
+        self::assertSame(422, $invalid->status);
+        self::assertSame('application/problem+json; charset=utf-8', $invalid->headers['Content-Type']);
+        self::assertSame('VALIDATION_FAILED', json_decode($invalid->body, true)['title']);
+
+        $this->operations->spotifySearchException = new SpotifyNotAuthorized('authorization required');
+        $notAuthorized = $this->application->handle(new Request('GET', '/spotify/tracks/search'));
+        self::assertSame(409, $notAuthorized->status);
+        self::assertSame('SPOTIFY_NOT_AUTHORIZED', json_decode($notAuthorized->body, true)['title']);
+
+        $this->operations->spotifySearchException = new SpotifyRateLimited(17);
+        $limited = $this->application->handle(new Request('GET', '/spotify/tracks/search'));
+        self::assertSame(429, $limited->status);
+        self::assertSame('17', $limited->headers['Retry-After']);
+        self::assertSame('SPOTIFY_RATE_LIMITED', json_decode($limited->body, true)['title']);
+
+        $this->operations->spotifySearchException = new RuntimeException('unexpected failure');
+        $failed = $this->application->handle(new Request('GET', '/spotify/tracks/search'));
+        self::assertSame(500, $failed->status);
+        self::assertSame('application/problem+json; charset=utf-8', $failed->headers['Content-Type']);
+        self::assertSame('OPERATION_FAILED', json_decode($failed->body, true)['title']);
+    }
+
     public function testLoginRequiresCsrfAndRotatesSession(): void
     {
         $page = $this->application->handle(new Request('GET', '/login'));
@@ -192,17 +250,23 @@ final class WebApplicationTest extends TestCase
             $this->application->handle(new Request('GET', '/'))->body,
         );
 
-        self::assertSame(303, $this->application->handle(new Request('POST', '/matches/42', form: [
+        $selected = $this->application->handle(new Request('POST', '/matches/42', form: [
             '_csrf' => $token,
             'track' => 'spotify:track:test',
-        ]))->status);
+            'return_to' => '/playlists/7',
+        ]));
+        self::assertSame(303, $selected->status);
+        self::assertSame('/playlists/7', $selected->headers['Location']);
         self::assertSame([['song_id' => 42, 'track' => 'spotify:track:test']], $this->operations->selectedMatches);
 
-        self::assertSame(303, $this->application->handle(new Request('POST', '/matches/43', form: [
+        $reset = $this->application->handle(new Request('POST', '/matches/43', form: [
             '_csrf' => $token,
-            'action' => 'reject',
-        ]))->status);
-        self::assertSame([43], $this->operations->rejectedMatches);
+            'action' => 'reset',
+            'return_to' => 'https://attacker.example/redirect',
+        ]));
+        self::assertSame(303, $reset->status);
+        self::assertSame('/', $reset->headers['Location']);
+        self::assertSame([43], $this->operations->resetMatches);
 
         $invalidLogout = $this->application->handle(new Request('POST', '/logout', form: ['_csrf' => 'wrong']));
         self::assertSame(403, $invalidLogout->status);
@@ -231,6 +295,35 @@ final class WebApplicationTest extends TestCase
         self::assertSame(200, $dashboard->status);
         self::assertStringNotContainsString('data-dialog-target="play-history-42"', $dashboard->body);
         self::assertStringNotContainsString('Meistgespielte Songs', $dashboard->body);
+    }
+
+    public function testDashboardRendersSpotifySearchDialogForOpenMatch(): void
+    {
+        $this->operations->unresolvedMatches = [[
+            'song_id' => 42,
+            'title' => 'Test Song',
+            'artist' => 'Artist (CH)',
+            'play_count' => 3,
+            'status' => 'review',
+            'spotify_track_id' => 'candidate0001',
+            'spotify_title' => 'Candidate Song',
+            'spotify_artist' => 'Candidate Artist',
+            'spotify_duration_ms' => 181_000,
+        ]];
+        $this->login();
+
+        $dashboard = $this->application->handle(new Request('GET', '/'));
+
+        self::assertSame(200, $dashboard->status);
+        self::assertStringContainsString('data-dialog-target="spotify-match-42"', $dashboard->body);
+        self::assertStringContainsString('id="spotify-match-42"', $dashboard->body);
+        self::assertStringContainsString('value="Artist" maxlength="200"', $dashboard->body);
+        self::assertStringContainsString('Candidate Song', $dashboard->body);
+        self::assertStringContainsString('Bisheriger Vorschlag', $dashboard->body);
+        self::assertStringContainsString('gilt für diesen SRF-Song in allen Playlists', $dashboard->body);
+        self::assertStringContainsString('name="scope" value="global"', $dashboard->body);
+        self::assertStringContainsString('name="return_to" value="/"', $dashboard->body);
+        self::assertStringNotContainsString('value="reject"', $dashboard->body);
     }
 
     public function testDashboardLinksConfiguredPlaylistsByCoverAndName(): void
@@ -285,6 +378,10 @@ final class WebApplicationTest extends TestCase
                 'artist' => 'Artist & Co.',
                 'play_count' => 2,
                 'match_status' => 'accepted',
+                'spotify_track_id' => 'current00001',
+                'spotify_title' => 'Current Spotify Song',
+                'spotify_artist' => 'Current Spotify Artist',
+                'spotify_duration_ms' => 180_000,
                 'play_times' => [
                     ['datetime' => '2026-08-01T12:34:00+02:00', 'label' => '01.08.2026, 12:34'],
                     ['datetime' => '2026-07-31T08:15:00+02:00', 'label' => '31.07.2026, 08:15'],
@@ -340,6 +437,12 @@ final class WebApplicationTest extends TestCase
         self::assertStringContainsString('Nicht im Sync-Ziel', $detail->body);
         self::assertStringContainsString('Kein akzeptierter Spotify-Match', $detail->body);
         self::assertStringContainsString('data-dialog-target="ignore-song-42"', $detail->body);
+        self::assertStringContainsString('data-dialog-target="spotify-match-42"', $detail->body);
+        self::assertStringContainsString('data-dialog-target="spotify-match-45"', $detail->body);
+        self::assertStringContainsString('id="spotify-match-42"', $detail->body);
+        self::assertStringContainsString('Aktuelle Zuordnung', $detail->body);
+        self::assertStringContainsString('Current Spotify Song', $detail->body);
+        self::assertStringContainsString('name="return_to" value="/playlists/2"', $detail->body);
         self::assertStringContainsString('name="scope" value="playlist" checked', $detail->body);
         self::assertStringContainsString('name="reason" maxlength="500"', $detail->body);
         self::assertStringContainsString(
@@ -426,7 +529,7 @@ final class WebApplicationTest extends TestCase
             '_csrf' => $token,
             'song_id' => '42',
             'playlist_id' => '2',
-            'source_playlist_id' => '2',
+            'return_to' => '/playlists/2',
             'scope' => 'playlist',
             'reason' => 'Too repetitive',
         ]));

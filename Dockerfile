@@ -7,6 +7,7 @@ RUN apt-get update \
         libjpeg62-turbo-dev \
         libonig-dev \
         libpng-dev \
+        nodejs \
         unzip \
     && docker-php-ext-configure gd --with-jpeg \
     && docker-php-ext-install curl gd intl mbstring pdo_mysql \

@@ -340,7 +340,7 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertSame('track000009', $stored->trackId);
     }
 
-    public function testManualSpotifyUrlSelectionAndRejection(): void
+    public function testManualSpotifyUrlSelectionAndResetCannotBeOverwrittenAutomatically(): void
     {
         $now = new DateTimeImmutable('2020-01-03T12:00:00+01:00');
         $this->importTestPlays($now);
@@ -357,13 +357,23 @@ final class PlaylistSyncServiceTest extends TestCase
             $songId,
             'https://open.spotify.com/track/track000002?si=test',
         );
-        $rejected = $service->reject($songId);
+        $reset = $service->reset($songId);
+        $repository = new SpotifyMatchRepository($this->connection);
+        $repository->saveAutomatic(
+            $songId,
+            new MatchDecision('accepted', $this->track('track000003', 'Song B', 'Artist B'), 1.0, 0.0),
+        );
+        $stored = $repository->find($songId);
 
         self::assertSame('accepted', $selected->status);
         self::assertSame('track000002', $selected->trackId);
-        self::assertSame('manual', $rejected->source);
-        self::assertSame('rejected', $rejected->status);
-        self::assertNull($rejected->trackId);
+        self::assertSame('manual', $reset->source);
+        self::assertSame('review', $reset->status);
+        self::assertNull($reset->trackId);
+        self::assertNotNull($stored);
+        self::assertSame('manual', $stored->source);
+        self::assertSame('review', $stored->status);
+        self::assertNull($stored->trackId);
     }
 
     public function testIgnoredLeaderIsReplacedByNextEligibleSong(): void

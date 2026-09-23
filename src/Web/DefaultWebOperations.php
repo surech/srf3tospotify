@@ -10,14 +10,22 @@ use App\Infrastructure\Database\DashboardRepository;
 use App\Infrastructure\Database\PlaylistConfiguration;
 use App\Infrastructure\Database\SongIgnoreRule;
 use App\Infrastructure\Database\StoredSpotifyMatch;
+use App\Infrastructure\Spotify\SpotifyGateway;
+use App\Infrastructure\Spotify\SpotifyTrack;
 use DateTimeImmutable;
 use DateTimeZone;
+use InvalidArgumentException;
 
 final readonly class DefaultWebOperations implements WebOperations
 {
+    private const SPOTIFY_SEARCH_LIMIT = 10;
+    private const SPOTIFY_SEARCH_MAX_LENGTH = 200;
+    private const SPOTIFY_SEARCH_MAX_OFFSET = 1000;
+
     public function __construct(
         private ApplicationFactory $factory,
         private DashboardRepository $dashboardRepository,
+        private ?SpotifyGateway $spotify = null,
     ) {}
 
     public function dashboard(): array
@@ -71,6 +79,7 @@ final readonly class DefaultWebOperations implements WebOperations
                 fn(array $item): array => $this->rankingEntryData(
                     $item['ranking'],
                     $playTimes[$item['ranking']->songId] ?? [],
+                    $item['match'],
                 ) + [
                     'skip_reason' => $item['reason'],
                     'airplay_rank' => $item['airplay_rank'],
@@ -167,6 +176,51 @@ final readonly class DefaultWebOperations implements WebOperations
         return $this->factory->migrate();
     }
 
+    public function searchSpotifyTracks(string $title, string $artist, string $offset): array
+    {
+        $title = trim($title);
+        $artist = trim($artist);
+        if ($title === '' && $artist === '') {
+            throw new InvalidArgumentException('Title or artist is required.');
+        }
+        if (mb_strlen($title) > self::SPOTIFY_SEARCH_MAX_LENGTH
+            || mb_strlen($artist) > self::SPOTIFY_SEARCH_MAX_LENGTH
+        ) {
+            throw new InvalidArgumentException('Title and artist must not exceed 200 characters.');
+        }
+        $offset = trim($offset);
+        if (preg_match('/^\d+$/D', $offset) !== 1
+            || (int) $offset > self::SPOTIFY_SEARCH_MAX_OFFSET
+            || (int) $offset % self::SPOTIFY_SEARCH_LIMIT !== 0
+        ) {
+            throw new InvalidArgumentException('Offset must be a multiple of 10 between 0 and 1000.');
+        }
+        $parsedOffset = (int) $offset;
+        $tracks = ($this->spotify ?? $this->factory->spotifyClient())->searchTracks(
+            $title,
+            $artist,
+            $parsedOffset,
+        );
+
+        return [
+            'items' => array_map(static fn(SpotifyTrack $track): array => [
+                'id' => $track->id,
+                'title' => $track->title,
+                'artists' => $track->artists,
+                'artist' => $track->artistLabel(),
+                'album' => $track->album,
+                'release_year' => $track->releaseYear,
+                'duration_ms' => $track->durationMs,
+                'image_url' => $track->imageUrl,
+                'external_url' => $track->externalUrl,
+            ], $tracks),
+            'offset' => $parsedOffset,
+            'limit' => self::SPOTIFY_SEARCH_LIMIT,
+            'has_more' => \count($tracks) === self::SPOTIFY_SEARCH_LIMIT
+                && $parsedOffset < self::SPOTIFY_SEARCH_MAX_OFFSET,
+        ];
+    }
+
     public function selectMatch(int $songId, string $trackReference): array
     {
         $match = $this->factory->matchingService()->selectManualTrack($songId, $trackReference);
@@ -174,9 +228,9 @@ final readonly class DefaultWebOperations implements WebOperations
         return ['song_id' => $match->songId, 'status' => $match->status, 'track_id' => $match->trackId];
     }
 
-    public function rejectMatch(int $songId): array
+    public function resetMatch(int $songId): array
     {
-        $match = $this->factory->matchingService()->reject($songId);
+        $match = $this->factory->matchingService()->reset($songId);
 
         return ['song_id' => $match->songId, 'status' => $match->status];
     }
@@ -243,6 +297,11 @@ final readonly class DefaultWebOperations implements WebOperations
         $data = $entry->toArray();
         if ($match !== null) {
             $data['spotify_track_id'] = $match->trackId;
+            $data['spotify_uri'] = $match->uri;
+            $data['spotify_title'] = $match->title;
+            $data['spotify_artist'] = $match->artist;
+            $data['spotify_duration_ms'] = $match->durationMs;
+            $data['match_source'] = $match->source;
             $data['match_status'] = $match->status;
         }
 

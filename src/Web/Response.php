@@ -40,7 +40,7 @@ final readonly class Response
         http_response_code($this->status);
         $headers = array_merge([
             'Cache-Control' => 'no-store',
-            'Content-Security-Policy' => "default-src 'self'; style-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; base-uri 'self'",
+            'Content-Security-Policy' => "default-src 'self'; style-src 'self'; img-src 'self' data: https://i.scdn.co; form-action 'self'; frame-ancestors 'none'; base-uri 'self'",
             'Referrer-Policy' => 'no-referrer',
             'X-Content-Type-Options' => 'nosniff',
             'X-Frame-Options' => 'DENY',
