@@ -17,13 +17,29 @@ final readonly class SpotifyClient implements SpotifyGateway
         private AccessTokenProvider $tokenProvider,
     ) {}
 
-    public function searchTracks(string $title, string $artist): array
+    public function searchTracks(string $title, string $artist, int $offset = 0): array
     {
+        if ($offset < 0) {
+            throw new SpotifyException('Spotify search offset must not be negative.');
+        }
+        $terms = [];
+        $title = trim($title);
+        $artist = trim($artist);
+        if ($title !== '') {
+            $terms[] = 'track:' . $title;
+        }
+        if ($artist !== '') {
+            $terms[] = 'artist:' . $artist;
+        }
+        if ($terms === []) {
+            throw new SpotifyException('Spotify search requires a title or artist.');
+        }
         $query = http_build_query([
-            'q' => \sprintf('track:%s artist:%s', $title, $artist),
+            'q' => implode(' ', $terms),
             'type' => 'track',
             'market' => 'CH',
             'limit' => 10,
+            'offset' => $offset,
         ], '', '&', PHP_QUERY_RFC3986);
         $payload = $this->requestJson('GET', self::API_URL . '/search?' . $query, null, [200]);
         $items = $payload['tracks']['items'] ?? null;
@@ -252,7 +268,30 @@ final readonly class SpotifyClient implements SpotifyGateway
             throw new SpotifyException('Spotify track has no artist.');
         }
 
-        return new SpotifyTrack($id, $uri, $title, $artists, $duration);
+        $album = $this->optionalString($item['album']['name'] ?? null);
+        $releaseDate = $this->optionalString($item['album']['release_date'] ?? null);
+        $releaseYear = $releaseDate !== null && preg_match('/^\d{4}/', $releaseDate, $matches) === 1
+            ? $matches[0]
+            : null;
+        $imageUrl = $this->optionalString($item['album']['images'][0]['url'] ?? null);
+        $externalUrl = $this->optionalString($item['external_urls']['spotify'] ?? null);
+
+        return new SpotifyTrack(
+            $id,
+            $uri,
+            $title,
+            $artists,
+            $duration,
+            $album,
+            $releaseYear,
+            $imageUrl,
+            $externalUrl,
+        );
+    }
+
+    private function optionalString(mixed $value): ?string
+    {
+        return \is_string($value) && $value !== '' ? $value : null;
     }
 
     /** @param array<string, mixed> $payload */

@@ -14,6 +14,7 @@ use App\Infrastructure\Database\DashboardRepository;
 use App\Infrastructure\Database\ImportRepository;
 use App\Infrastructure\Database\Migrator;
 use App\Infrastructure\Database\PlaylistRepository;
+use App\Infrastructure\Spotify\SpotifyTrack;
 use App\Support\Config;
 use App\Support\JsonLogger;
 use App\Web\DefaultWebOperations;
@@ -22,6 +23,7 @@ use DateTimeZone;
 use PDO;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use Tests\Fakes\FakeSpotifyGateway;
 use Tests\Fakes\StaticSrfSource;
 
 #[CoversClass(DefaultWebOperations::class)]
@@ -32,6 +34,7 @@ final class WebPlaylistOperationsTest extends TestCase
 
     private PDO $connection;
     private DefaultWebOperations $operations;
+    private FakeSpotifyGateway $spotify;
     private string $logPath;
 
     protected function setUp(): void
@@ -46,9 +49,11 @@ final class WebPlaylistOperationsTest extends TestCase
             . "VALUES ('" . self::FALLBACK_PLAYLIST . "', 'Testbeschreibung', 30, 50, 0)",
         );
         $factory = new ApplicationFactory($config, \dirname(__DIR__, 2));
+        $this->spotify = new FakeSpotifyGateway();
         $this->operations = new DefaultWebOperations(
             $factory,
             new DashboardRepository($factory->connection()),
+            $this->spotify,
         );
     }
 
@@ -99,6 +104,20 @@ final class WebPlaylistOperationsTest extends TestCase
             ['17.09.2026, 23:59', '17.09.2026, 05:00'],
             array_column($detail['skipped'][0]['play_times'], 'label'),
         );
+
+        $reviewMatch = $this->connection->prepare(
+            "INSERT INTO spotify_matches (song_id, spotify_track_id, spotify_uri, spotify_title, spotify_artist, "
+            . "duration_ms, match_source, status, confidence) VALUES (:song_id, 'review-track', "
+            . "'spotify:track:review-track', 'Review Song', 'Review Artist', 181000, 'automatic', 'review', 0.75)",
+        );
+        $reviewMatch->execute(['song_id' => $detail['skipped'][0]['song_id']]);
+        $detailWithReview = $this->operations->playlist($musicDay);
+
+        self::assertIsArray($detailWithReview);
+        self::assertSame([], $detailWithReview['ranking']);
+        self::assertSame('review-track', $detailWithReview['skipped'][0]['spotify_track_id']);
+        self::assertSame('Review Song', $detailWithReview['skipped'][0]['spotify_title']);
+        self::assertSame('review', $detailWithReview['skipped'][0]['match_status']);
         self::assertNull($this->operations->playlist(999_999));
         self::assertNull($this->operations->playlistCover(999_999));
     }
@@ -129,6 +148,75 @@ final class WebPlaylistOperationsTest extends TestCase
         self::assertSame(0, $history['active_rule_count']);
         self::assertFalse($history['songs'][0]['rules'][0]['is_active']);
         self::assertNotNull($history['songs'][0]['rules'][0]['reactivated_at']);
+    }
+
+    public function testSpotifySearchReturnsMetadataAndConservativePagination(): void
+    {
+        $this->spotify->searchResults['Song|Artist'] = array_map(
+            static fn(int $index): SpotifyTrack => new SpotifyTrack(
+                \sprintf('track%06d', $index),
+                \sprintf('spotify:track:track%06d', $index),
+                'Song ' . $index,
+                ['Artist', 'Guest'],
+                180_000 + $index,
+                'Album',
+                '2024',
+                'https://images.example/cover.jpg',
+                'https://open.spotify.com/track/' . \sprintf('track%06d', $index),
+            ),
+            range(1, 10),
+        );
+
+        $result = $this->operations->searchSpotifyTracks(' Song ', ' Artist ', '20');
+
+        self::assertSame(20, $result['offset']);
+        self::assertSame(10, $result['limit']);
+        self::assertTrue($result['has_more']);
+        self::assertCount(10, $result['items']);
+        self::assertSame([
+            'id' => 'track000001',
+            'title' => 'Song 1',
+            'artists' => ['Artist', 'Guest'],
+            'artist' => 'Artist, Guest',
+            'album' => 'Album',
+            'release_year' => '2024',
+            'duration_ms' => 180_001,
+            'image_url' => 'https://images.example/cover.jpg',
+            'external_url' => 'https://open.spotify.com/track/track000001',
+        ], $result['items'][0]);
+        self::assertSame([
+            ['title' => 'Song', 'artist' => 'Artist', 'offset' => 20],
+        ], $this->spotify->searches);
+
+        $lastPage = $this->operations->searchSpotifyTracks('Song', 'Artist', '1000');
+
+        self::assertFalse($lastPage['has_more']);
+    }
+
+    public function testSpotifySearchAcceptsOneFieldAndValidatesInput(): void
+    {
+        $artistOnly = $this->operations->searchSpotifyTracks('', ' Artist ', '0');
+
+        self::assertSame([], $artistOnly['items']);
+        self::assertSame([
+            ['title' => '', 'artist' => 'Artist', 'offset' => 0],
+        ], $this->spotify->searches);
+
+        foreach ([
+            ['', '', '0'],
+            [str_repeat('x', 201), '', '0'],
+            ['Song', '', '-1'],
+            ['Song', '', '999'],
+            ['Song', '', '1001'],
+            ['Song', '', 'invalid'],
+        ] as [$title, $artist, $offset]) {
+            try {
+                $this->operations->searchSpotifyTracks($title, $artist, $offset);
+                self::fail('Expected invalid Spotify search input to be rejected.');
+            } catch (\InvalidArgumentException $exception) {
+                self::assertNotSame('', $exception->getMessage());
+            }
+        }
     }
 
     /**

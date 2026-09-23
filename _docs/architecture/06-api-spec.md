@@ -24,13 +24,16 @@ The web surface is a server-rendered owner dashboard. JSON responses are used fo
 | `POST` | `/ignored-songs/{ruleId}/reactivate` | Session + CSRF | Close one active ignore-rule period; the song qualifies normally again |
 | `POST` | `/actions/import` | Session + CSRF | Body: `from_date`, `to_date`; synchronous import result |
 | `POST` | `/actions/sync` | Session + CSRF | Build and synchronize all configured playlist rankings |
-| `POST` | `/matches/{songId}` | Session + CSRF | Body: Spotify track URL/ID or `rejected`; save manual override |
+| `GET` | `/spotify/tracks/search` | Session | Query: optional `title`, optional `artist`, 10-aligned `offset` from 0 to 1000; at least one search term; returns 10 CH-market tracks and `has_more` |
+| `POST` | `/matches/{songId}` | Session + CSRF | Body: `action=select` with Spotify track URL/ID, or `action=reset`; optional safe `return_to` for dashboard/playlist reload |
 | `GET` | `/spotify/authorize` | Session | Redirect to Spotify Authorization Code Flow |
 | `GET` | `/spotify/callback` | Session + OAuth state | Exchange code and store encrypted tokens |
 | `POST` | `/internal/cron/import` | Bearer token | Import previous complete Europe/Zurich day |
 | `POST` | `/internal/cron/sync` | Bearer token | Synchronize all configured playlist rankings |
 | `POST` | `/internal/maintenance/migrate` | Bearer token | Apply pending idempotent database migrations after FTP deployment |
 | `GET` | `/health` | Public | `200` with status and non-reversible diagnostics for the loaded admin password hash; never returns the full hash |
+
+Spotify search errors use `application/problem+json`. Rate limiting returns `429` with Spotify's `Retry-After`; expired owner sessions return `401`, and missing Spotify authorization returns `409`.
 
 The password-hash diagnostics contain the configuration source, length, algorithm, prefix, suffix and SHA-256 fingerprint. A valid bcrypt value has length `60`, algorithm `bcrypt` and prefix `$2y$10$`.
 

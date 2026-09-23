@@ -24,14 +24,28 @@ final class FakeWebOperations implements WebOperations
     /** @var list<array{song_id: int, track: string}> */
     public array $selectedMatches = [];
 
+    /** @var list<array{title: string, artist: string, offset: string}> */
+    public array $spotifySearches = [];
+
+    /** @var array<string, mixed> */
+    public array $spotifySearchResult = [
+        'items' => [],
+        'offset' => 0,
+        'limit' => 10,
+        'has_more' => false,
+    ];
+
     /** @var list<int> */
-    public array $rejectedMatches = [];
+    public array $resetMatches = [];
 
     /** @var list<array<string, mixed>> */
     public array $ranking = [];
 
     /** @var list<array<string, mixed>> */
     public array $playlists = [];
+
+    /** @var list<array<string, mixed>> */
+    public array $unresolvedMatches = [];
 
     /** @var array<int, array<string, mixed>> */
     public array $playlistDetails = [];
@@ -74,6 +88,7 @@ final class FakeWebOperations implements WebOperations
     public ?Throwable $dashboardException = null;
     public ?Throwable $importException = null;
     public ?Throwable $synchronizeException = null;
+    public ?Throwable $spotifySearchException = null;
 
     public function dashboard(): array
     {
@@ -85,7 +100,7 @@ final class FakeWebOperations implements WebOperations
             'statistics' => ['plays' => 0, 'songs' => 0, 'unresolved' => 0, 'last_import' => null, 'last_sync' => null],
             'playlists' => $this->playlists,
             'ranking' => $this->ranking,
-            'unresolved_matches' => [],
+            'unresolved_matches' => $this->unresolvedMatches,
             'recent_imports' => [],
             'recent_syncs' => $this->recentSyncs,
         ];
@@ -147,6 +162,16 @@ final class FakeWebOperations implements WebOperations
         return ['applied' => [], 'skipped' => ['001_initial']];
     }
 
+    public function searchSpotifyTracks(string $title, string $artist, string $offset): array
+    {
+        if ($this->spotifySearchException !== null) {
+            throw $this->spotifySearchException;
+        }
+        $this->spotifySearches[] = compact('title', 'artist', 'offset');
+
+        return $this->spotifySearchResult;
+    }
+
     public function selectMatch(int $songId, string $trackReference): array
     {
         $this->selectedMatches[] = ['song_id' => $songId, 'track' => $trackReference];
@@ -154,11 +179,11 @@ final class FakeWebOperations implements WebOperations
         return ['song_id' => $songId, 'track_id' => $trackReference, 'status' => 'accepted'];
     }
 
-    public function rejectMatch(int $songId): array
+    public function resetMatch(int $songId): array
     {
-        $this->rejectedMatches[] = $songId;
+        $this->resetMatches[] = $songId;
 
-        return ['song_id' => $songId, 'status' => 'rejected'];
+        return ['song_id' => $songId, 'status' => 'review'];
     }
 
     public function authorizationUrl(string $state, string $redirectUri): string

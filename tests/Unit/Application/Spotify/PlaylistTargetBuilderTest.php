@@ -48,6 +48,8 @@ final class PlaylistTargetBuilderTest extends TestCase
             PlaylistTarget::SKIPPED_MISSING_MATCH,
             PlaylistTarget::SKIPPED_DUPLICATE_TRACK,
         ], array_column($target->skipped, 'reason'));
+        self::assertNull($target->skipped[0]['match']);
+        self::assertSame('track-a', $target->skipped[1]['match']?->trackId);
         self::assertSame(1, $target->ignoredCount);
         self::assertSame(1, $target->missingMatchCount);
         self::assertSame(1, $target->duplicateTrackCount);

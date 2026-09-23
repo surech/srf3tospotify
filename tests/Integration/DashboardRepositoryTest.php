@@ -106,6 +106,35 @@ final class DashboardRepositoryTest extends TestCase
         ));
     }
 
+    public function testGlobalIgnoreHidesUnresolvedSongAndPriorCandidateIsExposed(): void
+    {
+        $match = $this->connection->prepare(
+            'INSERT INTO spotify_matches (song_id, spotify_track_id, spotify_uri, spotify_title, '
+            . 'spotify_artist, duration_ms, match_source, status, confidence) '
+            . "VALUES (:song_id, 'candidate-track', 'spotify:track:candidate-track', 'Candidate Song', "
+            . "'Candidate Artist', 181000, 'automatic', 'review', 0.7500)",
+        );
+        $match->execute(['song_id' => $this->songId]);
+        $repository = new DashboardRepository($this->connection);
+
+        $matches = array_column($repository->unresolvedMatches(10_000), null, 'song_id');
+        self::assertArrayHasKey($this->songId, $matches);
+        self::assertSame('candidate-track', $matches[$this->songId]['spotify_track_id']);
+        self::assertSame('Candidate Song', $matches[$this->songId]['spotify_title']);
+        self::assertSame('Candidate Artist', $matches[$this->songId]['spotify_artist']);
+        self::assertSame(181000, $matches[$this->songId]['spotify_duration_ms']);
+        $unresolvedBeforeIgnore = $repository->statistics()['unresolved'];
+
+        $ignore = $this->connection->prepare(
+            "INSERT INTO song_ignore_rules (song_id, playlist_id, reason) VALUES (:song_id, NULL, 'Test')",
+        );
+        $ignore->execute(['song_id' => $this->songId]);
+
+        $matches = array_column($repository->unresolvedMatches(10_000), null, 'song_id');
+        self::assertArrayNotHasKey($this->songId, $matches);
+        self::assertSame($unresolvedBeforeIgnore - 1, $repository->statistics()['unresolved']);
+    }
+
     private function scalar(string $sql): int
     {
         $statement = $this->connection->query($sql);

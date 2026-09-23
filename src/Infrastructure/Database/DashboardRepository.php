@@ -47,12 +47,24 @@ final readonly class DashboardRepository
                 SELECT s.id AS song_id, s.artist, s.title,
                     COUNT(p.id) AS play_count,
                     COALESCE(sm.status, 'pending') AS status,
-                    sm.confidence
+                    sm.confidence,
+                    sm.spotify_track_id,
+                    sm.spotify_uri,
+                    sm.spotify_title,
+                    sm.spotify_artist,
+                    sm.duration_ms AS spotify_duration_ms,
+                    sm.match_source
                 FROM songs s
                 INNER JOIN plays p ON p.song_id = s.id
                 LEFT JOIN spotify_matches sm ON sm.song_id = s.id
-                WHERE sm.id IS NULL OR sm.status IN ('pending', 'review')
-                GROUP BY s.id, s.artist, s.title, sm.status, sm.confidence
+                LEFT JOIN song_ignore_rules global_ignore
+                    ON global_ignore.song_id = s.id
+                    AND global_ignore.playlist_id IS NULL
+                    AND global_ignore.reactivated_at IS NULL
+                WHERE global_ignore.id IS NULL
+                    AND (sm.id IS NULL OR sm.status IN ('pending', 'review'))
+                GROUP BY s.id, s.artist, s.title, sm.status, sm.confidence, sm.spotify_track_id,
+                    sm.spotify_uri, sm.spotify_title, sm.spotify_artist, sm.duration_ms, sm.match_source
                 ORDER BY play_count DESC, s.normalized_artist, s.normalized_title
                 LIMIT :limit
                 SQL,
@@ -71,8 +83,15 @@ final readonly class DashboardRepository
                 SELECT
                     (SELECT COUNT(*) FROM plays) AS plays,
                     (SELECT COUNT(*) FROM songs) AS songs,
-                    (SELECT COUNT(*) FROM songs s LEFT JOIN spotify_matches sm ON sm.song_id = s.id
-                        WHERE sm.id IS NULL OR sm.status IN ('pending', 'review')) AS unresolved,
+                    (SELECT COUNT(*)
+                        FROM songs s
+                        LEFT JOIN spotify_matches sm ON sm.song_id = s.id
+                        LEFT JOIN song_ignore_rules global_ignore
+                            ON global_ignore.song_id = s.id
+                            AND global_ignore.playlist_id IS NULL
+                            AND global_ignore.reactivated_at IS NULL
+                        WHERE global_ignore.id IS NULL
+                            AND (sm.id IS NULL OR sm.status IN ('pending', 'review'))) AS unresolved,
                     (SELECT MAX(finished_at) FROM import_runs WHERE status = 'succeeded') AS last_import,
                     (SELECT MAX(finished_at) FROM sync_runs WHERE status = 'succeeded') AS last_sync
                 SQL,

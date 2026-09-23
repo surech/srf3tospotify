@@ -52,7 +52,7 @@ final readonly class PlaylistTargetService
             $exclusions->spotifyTrackIds,
         );
         $matches = $resolver === null
-            ? $this->matchRepository->findAccepted(array_map(
+            ? $this->matchRepository->findBySongIds(array_map(
                 static fn(RankingEntry $entry): int => $entry->songId,
                 $ranking,
             ))

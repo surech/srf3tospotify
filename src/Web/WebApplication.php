@@ -35,7 +35,7 @@ final readonly class WebApplication
         } catch (ImportLocked $exception) {
             return $this->error($request, 409, 'OPERATION_LOCKED', $exception->getMessage());
         } catch (SpotifyNotAuthorized $exception) {
-            if (str_starts_with($request->path, '/internal/')) {
+            if (str_starts_with($request->path, '/internal/') || $this->isJsonRoute($request)) {
                 return $this->error($request, 409, 'SPOTIFY_NOT_AUTHORIZED', $exception->getMessage());
             }
 
@@ -43,7 +43,7 @@ final readonly class WebApplication
         } catch (SpotifyRateLimited $exception) {
             return $this->error(
                 $request,
-                503,
+                $this->isJsonRoute($request) ? 429 : 503,
                 'SPOTIFY_RATE_LIMITED',
                 $exception->getMessage(),
                 ['Retry-After' => (string) $exception->retryAfterSeconds],
@@ -102,7 +102,16 @@ final readonly class WebApplication
             return Response::redirect('/');
         }
         if (!$this->authentication->authenticated()) {
-            return Response::redirect('/login', 302);
+            return $this->isJsonRoute($request)
+                ? $this->problem(401, 'UNAUTHORIZED', 'Authentication is required.')
+                : Response::redirect('/login', 302);
+        }
+        if ($request->method === 'GET' && $request->path === '/spotify/tracks/search') {
+            return Response::json($this->operations->searchSpotifyTracks(
+                $request->query['title'] ?? '',
+                $request->query['artist'] ?? '',
+                $request->query['offset'] ?? '0',
+            ));
         }
         if ($request->method === 'POST' && $request->path === '/logout') {
             if (!$this->csrf->valid($request->form['_csrf'] ?? null)) {
@@ -206,6 +215,10 @@ final readonly class WebApplication
                 $request->form['reason'] ?? null,
             );
             $this->flash('Song ignoriert. Spotify wird beim nächsten Sync aktualisiert.');
+            $returnTo = $request->form['return_to'] ?? null;
+            if (\is_string($returnTo) && $returnTo !== '') {
+                return Response::redirect($this->safeReturnTo($returnTo));
+            }
             $sourcePlaylistId = (int) ($request->form['source_playlist_id'] ?? 0);
 
             return Response::redirect($sourcePlaylistId > 0 ? '/playlists/' . $sourcePlaylistId : '/ignored-songs');
@@ -224,15 +237,18 @@ final readonly class WebApplication
         if ($request->method === 'POST' && preg_match('~^/matches/(\d+)$~', $request->path, $matches) === 1) {
             $this->requireCsrf($request);
             $songId = (int) $matches[1];
-            if (($request->form['action'] ?? '') === 'reject') {
-                $this->operations->rejectMatch($songId);
-                $this->flash('Song für Spotify abgelehnt.');
-            } else {
+            $action = $request->form['action'] ?? 'select';
+            if ($action === 'reset') {
+                $this->operations->resetMatch($songId);
+                $this->flash('Spotify-Zuordnung zur manuellen Prüfung zurückgesetzt.');
+            } elseif ($action === 'select') {
                 $this->operations->selectMatch($songId, $request->form['track'] ?? '');
                 $this->flash('Spotify-Zuordnung gespeichert.');
+            } else {
+                throw new InvalidArgumentException('Match action must be select or reset.');
             }
 
-            return Response::redirect('/');
+            return Response::redirect($this->safeReturnTo($request->form['return_to'] ?? null));
         }
         if ($request->method === 'GET' && $request->path === '/spotify/authorize') {
             $redirectUri = $this->callbackUri();
@@ -303,6 +319,9 @@ final readonly class WebApplication
         if (str_starts_with($request->path, '/internal/')) {
             return Response::json(['status' => 'failed', 'error' => ['code' => $code, 'message' => $message]], $status, $headers);
         }
+        if ($this->isJsonRoute($request)) {
+            return $this->problem($status, $code, $message, $headers);
+        }
 
         return new Response(
             $status,
@@ -316,14 +335,29 @@ final readonly class WebApplication
         );
     }
 
-    private function problem(int $status, string $code, string $message): Response
+    /** @param array<string, string> $headers */
+    private function problem(int $status, string $code, string $message, array $headers = []): Response
     {
         return Response::json([
             'type' => 'about:blank',
             'title' => $code,
             'status' => $status,
             'detail' => $message,
-        ], $status, ['Content-Type' => 'application/problem+json; charset=utf-8']);
+        ], $status, array_merge(['Content-Type' => 'application/problem+json; charset=utf-8'], $headers));
+    }
+
+    private function isJsonRoute(Request $request): bool
+    {
+        return $request->path === '/spotify/tracks/search';
+    }
+
+    private function safeReturnTo(?string $returnTo): string
+    {
+        if ($returnTo === '/' || (\is_string($returnTo) && preg_match('~^/playlists/[1-9]\d*$~D', $returnTo) === 1)) {
+            return $returnTo;
+        }
+
+        return '/';
     }
 
     private function callbackUri(): string

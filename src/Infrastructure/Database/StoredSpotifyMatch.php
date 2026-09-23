@@ -14,5 +14,8 @@ final readonly class StoredSpotifyMatch
         public string $source,
         public string $status,
         public ?float $confidence,
+        public ?string $title = null,
+        public ?string $artist = null,
+        public ?int $durationMs = null,
     ) {}
 }

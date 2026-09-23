@@ -22,7 +22,7 @@ final class PlaylistTargetBuilder
     /** @var list<array{ranking: RankingEntry, match: StoredSpotifyMatch}> */
     private array $desired = [];
 
-    /** @var list<array{ranking: RankingEntry, reason: string, airplay_rank: int}> */
+    /** @var list<array{ranking: RankingEntry, match: StoredSpotifyMatch|null, reason: string, airplay_rank: int}> */
     private array $skipped = [];
 
     private int $ignoredCount = 0;
@@ -72,6 +72,7 @@ final class PlaylistTargetBuilder
             ++$this->missingMatchCount;
             $this->skipped[] = [
                 'ranking' => $entry,
+                'match' => $match,
                 'reason' => PlaylistTarget::SKIPPED_MISSING_MATCH,
                 'airplay_rank' => $this->examinedCount,
             ];
@@ -87,6 +88,7 @@ final class PlaylistTargetBuilder
             ++$this->duplicateTrackCount;
             $this->skipped[] = [
                 'ranking' => $entry,
+                'match' => $match,
                 'reason' => PlaylistTarget::SKIPPED_DUPLICATE_TRACK,
                 'airplay_rank' => $this->examinedCount,
             ];

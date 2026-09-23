@@ -20,21 +20,46 @@ use Tests\Fakes\StaticAccessTokenProvider;
 #[CoversClass(SpotifyRateLimited::class)]
 final class SpotifyClientTest extends TestCase
 {
-    public function testSearchesTenTracksInSwissMarket(): void
+    public function testSearchesPagedTracksInSwissMarket(): void
     {
         $http = new QueueHttpClient([$this->response(200, [
             'tracks' => ['items' => [$this->trackPayload('track000001', 'Song', 'Artist')]],
         ])]);
         $client = new SpotifyClient($http, new StaticAccessTokenProvider());
 
-        $tracks = $client->searchTracks('Song', 'Artist');
+        $tracks = $client->searchTracks('Song', 'Artist', 20);
 
         self::assertCount(1, $tracks);
         self::assertSame('track000001', $tracks[0]->id);
         self::assertSame('Artist', $tracks[0]->artistLabel());
-        self::assertStringContainsString('market=CH', $http->requests[0]['url']);
-        self::assertStringContainsString('limit=10', $http->requests[0]['url']);
+        self::assertSame('Album', $tracks[0]->album);
+        self::assertSame('2024', $tracks[0]->releaseYear);
+        self::assertSame('https://images.example/cover.jpg', $tracks[0]->imageUrl);
+        self::assertSame('https://open.spotify.com/track/track000001', $tracks[0]->externalUrl);
+        parse_str((string) parse_url($http->requests[0]['url'], PHP_URL_QUERY), $query);
+        self::assertSame('track:Song artist:Artist', $query['q']);
+        self::assertSame('CH', $query['market']);
+        self::assertSame('10', $query['limit']);
+        self::assertSame('20', $query['offset']);
         self::assertSame('Bearer test-access-token', $http->requests[0]['headers']['Authorization']);
+    }
+
+    public function testSearchBuildsQueryFromOnlyPopulatedFields(): void
+    {
+        $http = new QueueHttpClient([
+            $this->response(200, ['tracks' => ['items' => []]]),
+            $this->response(200, ['tracks' => ['items' => []]]),
+        ]);
+        $client = new SpotifyClient($http, new StaticAccessTokenProvider());
+
+        $client->searchTracks('', ' Artist ');
+        $client->searchTracks(' Song ', '', 10);
+
+        parse_str((string) parse_url($http->requests[0]['url'], PHP_URL_QUERY), $artistQuery);
+        parse_str((string) parse_url($http->requests[1]['url'], PHP_URL_QUERY), $titleQuery);
+        self::assertSame('artist:Artist', $artistQuery['q']);
+        self::assertSame('track:Song', $titleQuery['q']);
+        self::assertSame('10', $titleQuery['offset']);
     }
 
     public function testGetsTrackAndCreatesPlaylist(): void
@@ -164,6 +189,12 @@ final class SpotifyClientTest extends TestCase
             'name' => $title,
             'duration_ms' => 180_000,
             'artists' => [['name' => $artist]],
+            'album' => [
+                'name' => 'Album',
+                'release_date' => '2024-06-01',
+                'images' => [['url' => 'https://images.example/cover.jpg']],
+            ],
+            'external_urls' => ['spotify' => 'https://open.spotify.com/track/' . $id],
         ];
     }
 

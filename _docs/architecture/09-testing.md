@@ -8,6 +8,7 @@
 | Database integration | Migrations, upserts, constraints, rankings, token storage, advisory locks | Real MariaDB container |
 | HTTP adapter | SRF and Spotify request/response handling | Local deterministic fake server or transport fake; no live API dependency |
 | Application integration | Import and sync services with real DB plus fake upstreams | Success, duplicate retry, truncation split, rate limit, partial failure |
+| Browser logic | Spotify search requests, pagination, metadata and native-dialog interactions | Node built-in test runner with deterministic fetch and DOM fakes |
 | Smoke | Built Apache container and production artifact | Login, dashboard, manual fixture import, health endpoint |
 | Live acceptance | Owner-controlled SRF and Spotify accounts | One historical import, OAuth, reviewed match and public playlist sync |
 
@@ -21,6 +22,8 @@
 - Parallel web and cron imports result in one active run and one lock-conflict response.
 - Spotify candidate threshold and runner-up margin route ambiguous versions to review.
 - Manual Spotify override survives later matching and synchronization.
+- Manual reset remains in review, migrated rejection rules reactivate without automatic reassignment, and review candidates remain visible in playlist details.
+- Spotify search preserves editable inputs on errors, reports rate-limit retry timing, paginates by 10 and never preselects a result.
 - Desired playlist contains unique tracks in deterministic ranking order.
 - Dashboard lists every configured playlist alphabetically and uses a neutral fallback when no cover is mapped.
 - Playlist detail rankings use the same rolling or fixed time window, filters and track limit as synchronization.
@@ -33,6 +36,7 @@
 - PHPUnit suite passes in Docker.
 - PHPStan reports no errors at the configured strictness level.
 - Formatting check passes without modifying files.
+- Node JavaScript tests pass inside the Compose application image through `composer quality`.
 - Database migrations apply from empty schema and are repeatably detectable.
 - Production artifact starts against the verified MariaDB version.
 - No automatic browser screenshots or UI automation; visual checks remain manual unless explicitly requested.

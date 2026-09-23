@@ -14,7 +14,7 @@ final readonly class PlaylistTarget
 
     /**
      * @param list<array{ranking: RankingEntry, match: StoredSpotifyMatch}> $desired
-    * @param list<array{ranking: RankingEntry, reason: string, airplay_rank: int}> $skipped
+        * @param list<array{ranking: RankingEntry, match: StoredSpotifyMatch|null, reason: string, airplay_rank: int}> $skipped
      */
     public function __construct(
         public array $desired,

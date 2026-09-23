@@ -45,6 +45,8 @@ docker compose exec -T app composer quality
 docker compose exec -T app vendor/bin/phpunit --coverage-text --coverage-filter src
 ```
 
+`composer quality` prüft PHP-Formatierung, PHPStan, die JavaScript-Tests mit Node.js und die vollständige PHPUnit-Suite.
+
 ## Spotify
 
 1. Spotify-App im Developer Dashboard erstellen.

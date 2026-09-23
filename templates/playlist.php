@@ -89,6 +89,9 @@ $skipReasonLabels = [
                   <details class="context-menu">
                     <summary aria-label="Aktionen für <?= $escape($entry['title'] ?? '') ?>" title="Aktionen">&#8942;</summary>
                     <div class="context-menu-popover" role="menu">
+                      <button type="button" class="context-menu-primary" role="menuitem" data-dialog-target="spotify-match-<?= $escape($entry['song_id'] ?? '') ?>">
+                        <?= ($entry['match_status'] ?? '') === 'accepted' ? 'Zuordnung ändern' : 'Zuordnen' ?>
+                      </button>
                       <button type="button" role="menuitem" data-dialog-target="ignore-song-<?= $escape($entry['song_id'] ?? '') ?>">Song ignorieren</button>
                     </div>
                   </details>
@@ -121,6 +124,9 @@ $skipReasonLabels = [
                     <details class="context-menu">
                       <summary aria-label="Aktionen für <?= $escape($entry['title'] ?? '') ?>" title="Aktionen">&#8942;</summary>
                       <div class="context-menu-popover" role="menu">
+                        <button type="button" class="context-menu-primary" role="menuitem" data-dialog-target="spotify-match-<?= $escape($entry['song_id'] ?? '') ?>">
+                          <?= ($entry['match_status'] ?? '') === 'accepted' ? 'Zuordnung ändern' : 'Zuordnen' ?>
+                        </button>
                         <button type="button" role="menuitem" data-dialog-target="ignore-song-<?= $escape($entry['song_id'] ?? '') ?>">Song ignorieren</button>
                       </div>
                     </details>
@@ -165,6 +171,8 @@ $skipReasonLabels = [
               <p class="empty-state">Keine Spielzeiten verfügbar.</p>
             <?php endif; ?>
           </dialog>
+
+          <?php $returnTo = '/playlists/' . (int) ($playlist['id'] ?? 0); require __DIR__ . '/_spotify-match-dialog.php'; ?>
 
           <?php $ignoreDialogId = 'ignore-song-' . (int) ($entry['song_id'] ?? $index); ?>
           <dialog class="app-dialog ignore-song-dialog" id="<?= $escape($ignoreDialogId) ?>" aria-labelledby="<?= $escape($ignoreDialogId) ?>-title">

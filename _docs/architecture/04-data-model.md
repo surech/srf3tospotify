@@ -8,7 +8,7 @@
 | `song` | Logical artist/title identity used for aggregation and Spotify matching | Created on first play, retained |
 | `play` | One broadcast event normalized to UTC | Imported idempotently, retained |
 | `import_run` | Auditable import attempt and counts | Running, succeeded, failed |
-| `spotify_match` | Cached automatic or manual mapping from logical song to Spotify track | Pending, accepted, review, rejected |
+| `spotify_match` | Cached automatic or manual mapping from logical song to Spotify track | Pending, accepted, review; rejected is retained only as a legacy migration value |
 | `oauth_token` | Encrypted Spotify refresh/access token material | Active, refreshed, revoked |
 | `playlist` | Managed Spotify playlist and ranking policy | Unconfigured, active |
 | `sync_run` | Auditable desired playlist snapshot and result | Running, succeeded, failed |
@@ -21,6 +21,7 @@
 - `play.event_hash`: SHA-256 of channel ID, exact UTC play timestamp, normalized artist/title and duration; unique.
 - Exact play time is mandatory in the event key so repeated broadcasts of the same song remain separate events.
 - `spotify_match.song_id`: unique, ensuring one current mapping per logical song.
+- A manual `review` match has no Spotify track fields and blocks later automatic acceptance until the owner selects a track.
 - `sync_run_item`: unique by `(sync_run_id, spotify_track_id)` to prevent duplicate playlist items.
 - `song_ignore_rule`: at most one active period per `(song_id, global-or-playlist scope)`; inactive periods remain retained.
 - A null `song_ignore_rule.playlist_id` denotes a global rule that also applies to future playlists.

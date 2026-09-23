@@ -37,12 +37,15 @@
 
 ## Matching Rules
 
-- Search Spotify with track and artist filters, market `CH`, type `track`, and current API maximum `limit=10`.
+- Search Spotify with optional track and artist filters, market `CH`, type `track`, and pages of 10 results.
 - Remove known radio-only suffixes such as `(CH)` from the search query, while retaining original values in storage.
 - Score normalized title equality, primary artist equality, duration proximity and penalties for `live`, `karaoke`, `tribute` or cover indicators absent from the SRF title.
 - Automatically accept only scores at or above 0.90 with a margin of at least 0.10 over the second result.
 - Scores below the threshold enter `review`; no-match outcomes enter `review`, not permanent failure.
-- A manual track ID or explicit rejection always overrides future automatic searches until the owner resets it.
+- The owner may search from the dashboard or playlist detail, edit artist/title independently, inspect Spotify metadata and select one result explicitly. Direct URL/track-ID assignment remains a fallback.
+- A manual track selection is global for the logical song and overrides future automatic searches.
+- Resetting a mapping stores a trackless manual `review` state, preventing automatic reassignment until the owner chooses a new track.
+- Rejecting a match is replaced by a global ignore rule with an optional reason. Existing manual rejections migrate to active global rules and trackless manual `review` matches; reactivation leaves the song open for manual review.
 
 ## Playlist Synchronization
 

@@ -40,9 +40,9 @@ final readonly class MatchingService
         return $this->repository->saveManualTrack($songId, $track);
     }
 
-    public function reject(int $songId): StoredSpotifyMatch
+    public function reset(int $songId): StoredSpotifyMatch
     {
-        return $this->repository->saveManualRejection($songId);
+        return $this->repository->saveManualReview($songId);
     }
 
     private function extractTrackId(string $reference): string

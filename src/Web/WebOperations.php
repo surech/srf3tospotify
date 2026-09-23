@@ -33,10 +33,13 @@ interface WebOperations
     public function migrate(): array;
 
     /** @return array<string, mixed> */
+    public function searchSpotifyTracks(string $title, string $artist, string $offset): array;
+
+    /** @return array<string, mixed> */
     public function selectMatch(int $songId, string $trackReference): array;
 
     /** @return array<string, mixed> */
-    public function rejectMatch(int $songId): array;
+    public function resetMatch(int $songId): array;
 
     public function authorizationUrl(string $state, string $redirectUri): string;
 
