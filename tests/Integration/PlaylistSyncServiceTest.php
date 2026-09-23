@@ -10,6 +10,8 @@ use App\Application\Spotify\MatchDecision;
 use App\Application\Spotify\MatchingEngine;
 use App\Application\Spotify\MatchingService;
 use App\Application\Spotify\PlaylistSyncService;
+use App\Application\Spotify\PlaylistTargetService;
+use App\Application\Spotify\SongIgnoreService;
 use App\Domain\RadioPlay;
 use App\Infrastructure\Database\AdvisoryLock;
 use App\Infrastructure\Database\ConnectionFactory;
@@ -17,6 +19,7 @@ use App\Infrastructure\Database\ImportRepository;
 use App\Infrastructure\Database\Migrator;
 use App\Infrastructure\Database\PlaylistRepository;
 use App\Infrastructure\Database\RankingRepository;
+use App\Infrastructure\Database\SongIgnoreRepository;
 use App\Infrastructure\Database\SpotifyMatchRepository;
 use App\Infrastructure\Spotify\SpotifyTrack;
 use App\Support\Config;
@@ -64,25 +67,14 @@ final class PlaylistSyncServiceTest extends TestCase
             'Song A|Artist A' => [$this->track('track000001', 'Song A', 'Artist A')],
             'Song B|Artist B' => [$this->track('track000002', 'Song B', 'Artist B')],
         ];
-        $matchRepository = new SpotifyMatchRepository($this->connection);
         $top50Cover = "\xFF\xD8top-50-cover\xFF\xD9";
         $morningCover = "\xFF\xD8morning-cover\xFF\xD9";
         $musiktagCover = "\xFF\xD8musiktag-cover\xFF\xD9";
-        $service = new PlaylistSyncService(
-            new RankingService(new RankingRepository($this->connection), new DateTimeZone('Europe/Zurich')),
-            new MatchingService($spotify, new MatchingEngine(), $matchRepository),
-            $matchRepository,
-            new PlaylistRepository($this->connection),
-            $spotify,
-            new AdvisoryLock($this->connection),
-            new JsonLogger($this->syncLogPath),
-            new DateTimeZone('Europe/Zurich'),
-            [
-                'SRF 3 - Top 50' => $top50Cover,
-                'SRF 3 - Der Morgen' => $morningCover,
-                'SRF 3 - Schweizer Musiktag 2026' => $musiktagCover,
-            ],
-        );
+        $service = $this->playlistSyncService($spotify, [
+            'SRF 3 - Top 50' => $top50Cover,
+            'SRF 3 - Der Morgen' => $morningCover,
+            'SRF 3 - Schweizer Musiktag 2026' => $musiktagCover,
+        ]);
 
         $result = $service->synchronize('manual', $now);
 
@@ -108,12 +100,14 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertSame('SRF 3 - Der Morgen', $configurations[1]->name);
         self::assertSame(30, $configurations[1]->rankingDays);
         self::assertSame(50, $configurations[1]->maxTracks);
+        self::assertSame(50, $configurations[1]->targetTracks);
         self::assertTrue($configurations[1]->rankingFilter->weekdaysOnly);
         self::assertSame(360, $configurations[1]->rankingFilter->localStartMinute);
         self::assertSame(600, $configurations[1]->rankingFilter->localEndMinute);
         self::assertTrue($configurations[1]->public);
         self::assertSame('SRF 3 - Schweizer Musiktag 2026', $configurations[2]->name);
         self::assertSame(500, $configurations[2]->maxTracks);
+        self::assertNull($configurations[2]->targetTracks);
         self::assertSame('2026-09-17T03:00:00+00:00', $configurations[2]->fixedFromUtc?->format(DATE_ATOM));
         self::assertSame('2026-09-17T22:00:00+00:00', $configurations[2]->fixedToUtcExclusive?->format(DATE_ATOM));
         self::assertSame([
@@ -165,17 +159,7 @@ final class PlaylistSyncServiceTest extends TestCase
             'Outside Morning|Artist O' => [$this->track('track000002', 'Outside Morning', 'Artist O')],
             'Morning Song|Artist M' => [$this->track('track000001', 'Morning Song', 'Artist M')],
         ];
-        $matchRepository = new SpotifyMatchRepository($this->connection);
-        $service = new PlaylistSyncService(
-            new RankingService(new RankingRepository($this->connection), new DateTimeZone('Europe/Zurich')),
-            new MatchingService($spotify, new MatchingEngine(), $matchRepository),
-            $matchRepository,
-            new PlaylistRepository($this->connection),
-            $spotify,
-            new AdvisoryLock($this->connection),
-            new JsonLogger($this->syncLogPath),
-            new DateTimeZone('Europe/Zurich'),
-        );
+        $service = $this->playlistSyncService($spotify);
 
         $result = $service->synchronize('manual', $now);
 
@@ -212,17 +196,7 @@ final class PlaylistSyncServiceTest extends TestCase
              END, spotify_owner_id = 'fake-owner-id'",
         );
         $spotify = new FakeSpotifyGateway();
-        $matchRepository = new SpotifyMatchRepository($this->connection);
-        $service = new PlaylistSyncService(
-            new RankingService(new RankingRepository($this->connection), new DateTimeZone('Europe/Zurich')),
-            new MatchingService($spotify, new MatchingEngine(), $matchRepository),
-            $matchRepository,
-            new PlaylistRepository($this->connection),
-            $spotify,
-            new AdvisoryLock($this->connection),
-            new JsonLogger($this->syncLogPath),
-            new DateTimeZone('Europe/Zurich'),
-        );
+        $service = $this->playlistSyncService($spotify);
 
         $service->synchronize('manual', new DateTimeImmutable('2020-01-03T12:00:00+01:00'));
 
@@ -255,17 +229,7 @@ final class PlaylistSyncServiceTest extends TestCase
             'Closing Song|Artist Closing' => [$this->track('track-closing', 'Closing Song', 'Artist Closing')],
             'After Window|Artist After' => [$this->track('track-after', 'After Window', 'Artist After')],
         ];
-        $matchRepository = new SpotifyMatchRepository($this->connection);
-        $service = new PlaylistSyncService(
-            new RankingService(new RankingRepository($this->connection), new DateTimeZone('Europe/Zurich')),
-            new MatchingService($spotify, new MatchingEngine(), $matchRepository),
-            $matchRepository,
-            new PlaylistRepository($this->connection),
-            $spotify,
-            new AdvisoryLock($this->connection),
-            new JsonLogger($this->syncLogPath),
-            new DateTimeZone('Europe/Zurich'),
-        );
+        $service = $this->playlistSyncService($spotify);
 
         $result = $service->synchronize('manual', $now);
 
@@ -303,17 +267,7 @@ final class PlaylistSyncServiceTest extends TestCase
             'Song A|Artist A' => [$this->track('track000001', 'Song A', 'Artist A')],
             'Song B|Artist B' => [$this->track('track000002', 'Song B', 'Artist B')],
         ];
-        $matchRepository = new SpotifyMatchRepository($this->connection);
-        $service = new PlaylistSyncService(
-            new RankingService(new RankingRepository($this->connection), new DateTimeZone('Europe/Zurich')),
-            new MatchingService($spotify, new MatchingEngine(), $matchRepository),
-            $matchRepository,
-            new PlaylistRepository($this->connection),
-            $spotify,
-            new AdvisoryLock($this->connection),
-            new JsonLogger($this->syncLogPath),
-            new DateTimeZone('Europe/Zurich'),
-        );
+        $service = $this->playlistSyncService($spotify);
 
         $result = $service->synchronize('manual', $now);
 
@@ -341,17 +295,7 @@ final class PlaylistSyncServiceTest extends TestCase
             'Song A|Artist A' => [$this->track('track000001', 'Song A', 'Artist A')],
             'Song B|Artist B' => [$this->track('track000002', 'Song B', 'Artist B')],
         ];
-        $matchRepository = new SpotifyMatchRepository($this->connection);
-        $service = new PlaylistSyncService(
-            new RankingService(new RankingRepository($this->connection), new DateTimeZone('Europe/Zurich')),
-            new MatchingService($spotify, new MatchingEngine(), $matchRepository),
-            $matchRepository,
-            new PlaylistRepository($this->connection),
-            $spotify,
-            new AdvisoryLock($this->connection),
-            new JsonLogger($this->syncLogPath),
-            new DateTimeZone('Europe/Zurich'),
-        );
+        $service = $this->playlistSyncService($spotify);
 
         try {
             $service->synchronize('manual', $now);
@@ -422,6 +366,72 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertNull($rejected->trackId);
     }
 
+    public function testIgnoredLeaderIsReplacedByNextEligibleSong(): void
+    {
+        $now = new DateTimeImmutable('2020-01-03T12:00:00+01:00');
+        $this->importPlays([
+            $this->play('2020-01-01T10:00:00Z', 'Artist A', 'Ignored Leader'),
+            $this->play('2020-01-01T11:00:00Z', 'Artist A', 'Ignored Leader'),
+            $this->play('2020-01-01T12:00:00Z', 'Artist A', 'Ignored Leader'),
+            $this->play('2020-01-01T13:00:00Z', 'Artist B', 'First Eligible'),
+            $this->play('2020-01-01T14:00:00Z', 'Artist B', 'First Eligible'),
+            $this->play('2020-01-01T15:00:00Z', 'Artist D', 'Must Not Overflow'),
+            $this->play('2020-01-01T16:00:00Z', 'Artist C', 'Backfill'),
+        ], '2020-01-01', '2020-01-01', $now);
+        $playlistId = (int) $this->fetchValue("SELECT id FROM playlists WHERE name = 'SRF 3 - Top 50'");
+        $ignoredSongId = (int) $this->fetchValue("SELECT id FROM songs WHERE title = 'Ignored Leader'");
+        $this->connection->exec(
+            "UPDATE playlists SET max_tracks = 5, target_tracks = 2 WHERE name = 'SRF 3 - Top 50'",
+        );
+        (new SongIgnoreService(new SongIgnoreRepository($this->connection)))
+            ->ignore($ignoredSongId, $playlistId, 'Test exclusion');
+        $spotify = new FakeSpotifyGateway();
+        $spotify->searchResults = [
+            'First Eligible|Artist B' => [$this->track('track-first', 'First Eligible', 'Artist B')],
+            'Backfill|Artist C' => [$this->track('track-backfill', 'Backfill', 'Artist C')],
+            'Must Not Overflow|Artist D' => [$this->track('track-overflow', 'Must Not Overflow', 'Artist D')],
+        ];
+
+        $result = $this->playlistSyncService($spotify)->synchronize('manual', $now);
+
+        self::assertSame(2, $result->trackCount);
+        self::assertSame([
+            'spotify:track:track-first',
+            'spotify:track:track-backfill',
+        ], $spotify->replacements[0]);
+    }
+
+    public function testDuplicateSpotifyTrackIsReplacedByNextUniqueSong(): void
+    {
+        $now = new DateTimeImmutable('2020-01-03T12:00:00+01:00');
+        $this->importPlays([
+            $this->play('2020-01-01T10:00:00Z', 'Artist A', 'First Alias'),
+            $this->play('2020-01-01T11:00:00Z', 'Artist A', 'First Alias'),
+            $this->play('2020-01-01T12:00:00Z', 'Artist A', 'First Alias'),
+            $this->play('2020-01-01T13:00:00Z', 'Artist B', 'Second Alias'),
+            $this->play('2020-01-01T14:00:00Z', 'Artist B', 'Second Alias'),
+            $this->play('2020-01-01T15:00:00Z', 'Artist C', 'Unique Backfill'),
+        ], '2020-01-01', '2020-01-01', $now);
+        $this->connection->exec(
+            "UPDATE playlists SET max_tracks = 2, target_tracks = 2 WHERE name = 'SRF 3 - Top 50'",
+        );
+        $spotify = new FakeSpotifyGateway();
+        $spotify->searchResults = [
+            'First Alias|Artist A' => [$this->track('track-shared', 'First Alias', 'Artist A')],
+            'Second Alias|Artist B' => [$this->track('track-shared', 'Second Alias', 'Artist B')],
+            'Unique Backfill|Artist C' => [$this->track('track-unique', 'Unique Backfill', 'Artist C')],
+        ];
+
+        $result = $this->playlistSyncService($spotify)->synchronize('manual', $now);
+
+        self::assertSame([
+            'spotify:track:track-shared',
+            'spotify:track:track-unique',
+        ], $spotify->replacements[0]);
+        self::assertSame(1, $result->playlists[0]->duplicateTrackCount);
+        self::assertFalse($result->playlists[0]->hasWarning);
+    }
+
     private function importTestPlays(DateTimeImmutable $now): void
     {
         $this->importPlays([
@@ -465,6 +475,27 @@ final class PlaylistSyncServiceTest extends TestCase
         return new SpotifyTrack($id, 'spotify:track:' . $id, $title, [$artist], 180_000);
     }
 
+    /** @param array<string, string> $coverImages */
+    private function playlistSyncService(FakeSpotifyGateway $spotify, array $coverImages = []): PlaylistSyncService
+    {
+        $matchRepository = new SpotifyMatchRepository($this->connection);
+
+        return new PlaylistSyncService(
+            new PlaylistTargetService(
+                new RankingService(new RankingRepository($this->connection), new DateTimeZone('Europe/Zurich')),
+                $matchRepository,
+                new SongIgnoreRepository($this->connection),
+            ),
+            new MatchingService($spotify, new MatchingEngine(), $matchRepository),
+            new PlaylistRepository($this->connection),
+            $spotify,
+            new AdvisoryLock($this->connection),
+            new JsonLogger($this->syncLogPath),
+            new DateTimeZone('Europe/Zurich'),
+            $coverImages,
+        );
+    }
+
     private function fetchValue(string $sql): mixed
     {
         $statement = $this->connection->query($sql);
@@ -479,6 +510,7 @@ final class PlaylistSyncServiceTest extends TestCase
     {
         $this->connection->exec('DELETE FROM sync_run_items');
         $this->connection->exec('DELETE FROM sync_runs');
+        $this->connection->exec('DELETE FROM song_ignore_rules');
         $this->connection->exec('DELETE FROM spotify_matches');
         $this->connection->exec("DELETE FROM plays WHERE played_at_utc >= '2020-01-01' AND played_at_utc < '2020-01-06'");
         $this->connection->exec("DELETE FROM plays WHERE played_at_utc >= '2026-09-17' AND played_at_utc < '2026-09-18'");
@@ -489,6 +521,7 @@ final class PlaylistSyncServiceTest extends TestCase
             "UPDATE playlists SET spotify_playlist_id = NULL, spotify_owner_id = NULL,
              ranking_days = CASE WHEN name = 'SRF 3 - Schweizer Musiktag 2026' THEN 1 ELSE 30 END,
              max_tracks = CASE WHEN name = 'SRF 3 - Schweizer Musiktag 2026' THEN 500 ELSE 50 END,
+             target_tracks = CASE WHEN name = 'SRF 3 - Schweizer Musiktag 2026' THEN NULL ELSE 50 END,
              is_public = 1",
         );
     }

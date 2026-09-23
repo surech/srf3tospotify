@@ -39,6 +39,36 @@ final class FakeWebOperations implements WebOperations
     /** @var array<int, string> */
     public array $playlistCovers = [];
 
+    /** @var list<array{song_id: int, playlist_id: int|null, reason: string|null}> */
+    public array $ignoredSongs = [];
+
+    /** @var list<int> */
+    public array $reactivatedRules = [];
+
+    /** @var array<string, mixed> */
+    public array $ignoredSongsPage = [
+        'songs' => [],
+        'song_count' => 0,
+        'active_rule_count' => 0,
+        'include_history' => false,
+    ];
+
+    /** @var list<array<string, int|string|null>> */
+    public array $recentSyncs = [];
+
+    /** @var array<string, mixed> */
+    public array $synchronizeResult = [
+        'playlist_count' => 2,
+        'track_count' => 3,
+        'unresolved_count' => 0,
+        'has_warnings' => false,
+        'total_track_count' => 4,
+        'total_requested_count' => 4,
+        'total_unresolved_count' => 0,
+        'total_ignored_count' => 0,
+        'total_duplicate_track_count' => 0,
+    ];
+
     public int $migrations = 0;
 
     public ?Throwable $dashboardException = null;
@@ -57,7 +87,7 @@ final class FakeWebOperations implements WebOperations
             'ranking' => $this->ranking,
             'unresolved_matches' => [],
             'recent_imports' => [],
-            'recent_syncs' => [],
+            'recent_syncs' => $this->recentSyncs,
         ];
     }
 
@@ -69,6 +99,25 @@ final class FakeWebOperations implements WebOperations
     public function playlistCover(int $playlistId): ?string
     {
         return $this->playlistCovers[$playlistId] ?? null;
+    }
+
+    public function ignoredSongs(bool $includeHistory): array
+    {
+        return $this->ignoredSongsPage + ['include_history' => $includeHistory];
+    }
+
+    public function ignoreSong(int $songId, ?int $playlistId, ?string $reason): array
+    {
+        $this->ignoredSongs[] = ['song_id' => $songId, 'playlist_id' => $playlistId, 'reason' => $reason];
+
+        return ['id' => 1, 'song_id' => $songId, 'playlist_id' => $playlistId, 'reason' => $reason];
+    }
+
+    public function reactivateSong(int $ruleId): array
+    {
+        $this->reactivatedRules[] = $ruleId;
+
+        return ['id' => $ruleId, 'is_active' => false];
     }
 
     public function import(string $fromDate, string $toDate, string $trigger): array
@@ -88,13 +137,7 @@ final class FakeWebOperations implements WebOperations
         }
         $this->synchronizations[] = $trigger;
 
-        return [
-            'playlist_count' => 2,
-            'track_count' => 3,
-            'unresolved_count' => 0,
-            'total_track_count' => 4,
-            'total_unresolved_count' => 0,
-        ];
+        return $this->synchronizeResult;
     }
 
     public function migrate(): array

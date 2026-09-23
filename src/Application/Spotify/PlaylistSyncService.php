@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace App\Application\Spotify;
 
 use App\Application\Import\ImportLocked;
-use App\Application\Ranking\RankingService;
 use App\Infrastructure\Database\AdvisoryLock;
 use App\Infrastructure\Database\PlaylistConfiguration;
 use App\Infrastructure\Database\PlaylistRepository;
-use App\Infrastructure\Database\SpotifyMatchRepository;
 use App\Infrastructure\Spotify\SpotifyGateway;
 use App\Support\JsonLogger;
 use App\Support\Uuid;
@@ -24,9 +22,8 @@ final readonly class PlaylistSyncService
 
     /** @param array<string, string> $playlistCoverImages */
     public function __construct(
-        private RankingService $rankingService,
+        private PlaylistTargetService $targetService,
         private MatchingService $matchingService,
-        private SpotifyMatchRepository $matchRepository,
         private PlaylistRepository $playlistRepository,
         private SpotifyGateway $spotify,
         private AdvisoryLock $lock,
@@ -46,12 +43,23 @@ final readonly class PlaylistSyncService
         }
 
         try {
+            $exclusionSnapshotAt = $this->targetService->snapshotTime();
             $results = [];
             $effectiveNow = $now ?? new DateTimeImmutable('now', $this->timezone);
             $firstException = null;
-            foreach ($this->playlistRepository->configurations() as $configuration) {
+            $configurations = $this->playlistRepository->configurations();
+            $exclusions = $this->targetService->exclusionSnapshot(array_map(
+                static fn(PlaylistConfiguration $configuration): int => $configuration->id,
+                $configurations,
+            ), $exclusionSnapshotAt);
+            foreach ($configurations as $configuration) {
                 try {
-                    $results[] = $this->synchronizePlaylist($configuration, $triggerType, $effectiveNow);
+                    $results[] = $this->synchronizePlaylist(
+                        $configuration,
+                        $exclusions[$configuration->id],
+                        $triggerType,
+                        $effectiveNow,
+                    );
                 } catch (Throwable $exception) {
                     $firstException ??= $exception;
                 }
@@ -68,6 +76,7 @@ final readonly class PlaylistSyncService
 
     private function synchronizePlaylist(
         PlaylistConfiguration $configuration,
+        PlaylistExclusions $exclusions,
         string $triggerType,
         DateTimeImmutable $effectiveNow,
     ): SynchronizedPlaylist {
@@ -75,15 +84,7 @@ final readonly class PlaylistSyncService
         $correlationId = Uuid::v4();
         $runId = null;
         try {
-            if ($configuration->fixedFromUtc !== null && $configuration->fixedToUtcExclusive !== null) {
-                $fromUtc = $configuration->fixedFromUtc;
-                $toUtcExclusive = $configuration->fixedToUtcExclusive;
-            } else {
-                [$fromUtc, $toUtcExclusive] = $this->rankingService->window(
-                    $configuration->rankingDays,
-                    $effectiveNow,
-                );
-            }
+            [$fromUtc, $toUtcExclusive] = $this->targetService->window($configuration, $effectiveNow);
             $runId = $this->playlistRepository->startRun(
                 $configuration->id,
                 $correlationId,
@@ -92,26 +93,14 @@ final readonly class PlaylistSyncService
                 $toUtcExclusive,
             );
 
-            $ranking = $this->rankingService->topBetween(
+            $target = $this->targetService->build(
+                $configuration,
                 $fromUtc,
                 $toUtcExclusive,
-                $configuration->maxTracks,
-                $configuration->rankingFilter,
+                $exclusions,
+                $this->matchingService->resolve(...),
             );
-            foreach ($ranking as $entry) {
-                $this->matchingService->resolve($entry);
-            }
-
-            $matches = $this->matchRepository->findAccepted(
-                array_map(static fn($entry): int => $entry->songId, $ranking),
-            );
-            $desired = [];
-            foreach ($ranking as $entry) {
-                $match = $matches[$entry->songId] ?? null;
-                if ($match !== null && $match->trackId !== null && $match->uri !== null) {
-                    $desired[] = ['ranking' => $entry, 'match' => $match];
-                }
-            }
+            $desired = $target->desired;
             $this->playlistRepository->saveDesiredItems($runId, $desired);
 
             $spotifyPlaylistId = $configuration->spotifyPlaylistId;
@@ -138,15 +127,19 @@ final readonly class PlaylistSyncService
 
             $uris = array_map(static fn(array $item): string => (string) $item['match']->uri, $desired);
             $snapshotId = $this->spotify->replacePlaylistItems($spotifyPlaylistId, $uris);
-            $unresolved = \count($ranking) - \count($desired);
-            $this->playlistRepository->finishRun($runId, $snapshotId, $unresolved);
+            $unresolved = $target->missingMatchCount;
+            $requestedCount = $configuration->targetTracks ?? \count($desired);
+            $this->playlistRepository->finishRun($runId, $snapshotId, $requestedCount, $target);
             $result = new SynchronizedPlaylist(
                 $configuration->name,
                 $correlationId,
                 $spotifyPlaylistId,
                 $snapshotId,
+                $requestedCount,
                 \count($desired),
                 $unresolved,
+                $target->ignoredCount,
+                $target->duplicateTrackCount,
             );
             $context = $result->toArray();
             $context['status'] = 'succeeded';

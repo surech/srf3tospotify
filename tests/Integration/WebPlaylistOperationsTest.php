@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Integration;
 
 use App\Application\Import\ImportService;
+use App\Application\Spotify\PlaylistTarget;
 use App\ApplicationFactory;
 use App\Domain\RadioPlay;
 use App\Infrastructure\Database\AdvisoryLock;
@@ -87,16 +88,47 @@ final class WebPlaylistOperationsTest extends TestCase
 
         self::assertIsArray($detail);
         self::assertSame('SRF 3 - Schweizer Musiktag 2026', $detail['playlist']['name']);
-        self::assertCount(1, $detail['ranking']);
-        self::assertSame('Music Day Song', $detail['ranking'][0]['title']);
-        self::assertSame(2, $detail['ranking'][0]['play_count']);
-        self::assertSame('pending', $detail['ranking'][0]['match_status']);
+        self::assertCount(0, $detail['ranking']);
+        self::assertCount(1, $detail['skipped']);
+        self::assertSame('Music Day Song', $detail['skipped'][0]['title']);
+        self::assertSame(2, $detail['skipped'][0]['play_count']);
+        self::assertSame('pending', $detail['skipped'][0]['match_status']);
+        self::assertSame(1, $detail['skipped'][0]['airplay_rank']);
+        self::assertSame(PlaylistTarget::SKIPPED_MISSING_MATCH, $detail['skipped'][0]['skip_reason']);
         self::assertSame(
             ['17.09.2026, 23:59', '17.09.2026, 05:00'],
-            array_column($detail['ranking'][0]['play_times'], 'label'),
+            array_column($detail['skipped'][0]['play_times'], 'label'),
         );
         self::assertNull($this->operations->playlist(999_999));
         self::assertNull($this->operations->playlistCover(999_999));
+    }
+
+    public function testIgnoredSongIsHiddenImmediatelyAndHistoryIsRetained(): void
+    {
+        $this->importMusicDayPlays();
+        $playlistId = $this->configurationId('SRF 3 - Schweizer Musiktag 2026');
+        $songQuery = $this->connection->query("SELECT id FROM songs WHERE title = 'Music Day Song'");
+        self::assertNotFalse($songQuery);
+        $songId = (int) $songQuery->fetchColumn();
+
+        $created = $this->operations->ignoreSong($songId, $playlistId, '  Nicht passend  ');
+        $detail = $this->operations->playlist($playlistId);
+        $active = $this->operations->ignoredSongs(false);
+
+        self::assertSame('Nicht passend', $created['reason']);
+        self::assertIsArray($detail);
+        self::assertSame([], $detail['ranking']);
+        self::assertSame([], $detail['skipped']);
+        self::assertSame(1, $detail['target']['ignored_count']);
+        self::assertSame(1, $active['song_count']);
+        self::assertSame(1, $active['active_rule_count']);
+
+        $this->operations->reactivateSong((int) $created['id']);
+        $history = $this->operations->ignoredSongs(true);
+
+        self::assertSame(0, $history['active_rule_count']);
+        self::assertFalse($history['songs'][0]['rules'][0]['is_active']);
+        self::assertNotNull($history['songs'][0]['rules'][0]['reactivated_at']);
     }
 
     /**
@@ -170,6 +202,7 @@ final class WebPlaylistOperationsTest extends TestCase
 
     private function cleanup(): void
     {
+        $this->connection->exec('DELETE FROM song_ignore_rules');
         $this->connection->exec("DELETE FROM plays WHERE played_at_utc >= '2026-09-17' AND played_at_utc < '2026-09-18'");
         $this->connection->exec("DELETE FROM import_runs WHERE range_from_utc >= '2026-09-16' AND range_from_utc < '2026-09-18'");
         $this->connection->exec('DELETE FROM songs WHERE NOT EXISTS (SELECT 1 FROM plays WHERE plays.song_id = songs.id)');

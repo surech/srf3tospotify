@@ -13,6 +13,7 @@
 | `playlist` | Managed Spotify playlist and ranking policy | Unconfigured, active |
 | `sync_run` | Auditable desired playlist snapshot and result | Running, succeeded, failed |
 | `sync_run_item` | Ordered desired track list for a synchronization | Immutable with its run |
+| `song_ignore_rule` | Historized global or playlist-specific exclusion period for one logical song | Active until manually reactivated; then immutable history |
 
 ## Keys and Constraints
 
@@ -21,6 +22,8 @@
 - Exact play time is mandatory in the event key so repeated broadcasts of the same song remain separate events.
 - `spotify_match.song_id`: unique, ensuring one current mapping per logical song.
 - `sync_run_item`: unique by `(sync_run_id, spotify_track_id)` to prevent duplicate playlist items.
+- `song_ignore_rule`: at most one active period per `(song_id, global-or-playlist scope)`; inactive periods remain retained.
+- A null `song_ignore_rule.playlist_id` denotes a global rule that also applies to future playlists.
 - Foreign keys use InnoDB and reject orphaned operational data.
 
 ## ERD
@@ -35,6 +38,8 @@ erDiagram
     SYNC_RUN ||--o{ SYNC_RUN_ITEM : contains
     SONG ||--o{ SYNC_RUN_ITEM : ranks
     SPOTIFY_MATCH ||--o{ SYNC_RUN_ITEM : resolves
+    SONG ||--o{ SONG_IGNORE_RULE : excludes
+    PLAYLIST ||--o{ SONG_IGNORE_RULE : scopes
 
     RADIO_CHANNEL {
         bigint id PK
@@ -98,6 +103,7 @@ erDiagram
         string name
         integer ranking_days
         integer max_tracks
+        integer target_tracks nullable
         boolean weekdays_only
         integer local_start_minute nullable
         integer local_end_minute nullable
@@ -113,6 +119,11 @@ erDiagram
         datetime window_from_utc
         datetime window_to_utc
         string spotify_snapshot_id
+        integer requested_count
+        integer track_count
+        integer ignored_count
+        integer unresolved_count
+        integer duplicate_track_count
         text error_summary
     }
     SYNC_RUN_ITEM {
@@ -123,6 +134,14 @@ erDiagram
         string spotify_track_id
         integer play_count
     }
+    SONG_IGNORE_RULE {
+        bigint id PK
+        bigint song_id FK
+        bigint playlist_id FK nullable
+        string reason nullable
+        datetime ignored_at
+        datetime reactivated_at nullable
+    }
 ```
 
 ## Storage Rules
@@ -132,6 +151,10 @@ erDiagram
 - SRF timestamp offset reconstructs the local weekday and minute for filtered rankings without relying on MariaDB timezone tables.
 - Null local start/end minutes mean all-day ranking; configured ranges include the start minute and exclude the end minute.
 - Null fixed UTC bounds select a rolling calendar window; configured bounds select one immutable inclusive/exclusive event window.
+- `playlist.max_tracks` caps candidate output. Nullable `target_tracks` distinguishes fixed-size playlists from policies that publish every eligible song up to the cap.
+- Ignore reasons are optional and limited to 500 characters. Reactivation timestamps close a rule period; rows are never reopened or overwritten.
+- Effective exclusions resolve the ignored song's current accepted Spotify track ID at target-calculation time, preventing aliases of the same concrete track while allowing distinct live or remix track IDs.
+- Synchronization diagnostics persist requested and actual counts plus ignored, missing-match and duplicate-track causes for each playlist run.
 - OAuth token ciphertext uses authenticated encryption; the encryption key comes from an environment variable and is never stored in MariaDB.
 - Raw upstream JSON is not retained by default; sanitized fixture samples belong only in tests.
 - Cleanup removes completed run metadata after 90 days. `play.import_run_id` becomes null through `ON DELETE SET NULL`; broadcast history remains intact.

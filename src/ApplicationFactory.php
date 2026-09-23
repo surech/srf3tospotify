@@ -10,6 +10,8 @@ use App\Application\Ranking\RankingService;
 use App\Application\Spotify\MatchingEngine;
 use App\Application\Spotify\MatchingService;
 use App\Application\Spotify\PlaylistSyncService;
+use App\Application\Spotify\PlaylistTargetService;
+use App\Application\Spotify\SongIgnoreService;
 use App\Infrastructure\Database\AdvisoryLock;
 use App\Infrastructure\Database\ConnectionFactory;
 use App\Infrastructure\Database\ImportRepository;
@@ -18,6 +20,7 @@ use App\Infrastructure\Database\Migrator;
 use App\Infrastructure\Database\OAuthTokenRepository;
 use App\Infrastructure\Database\PlaylistRepository;
 use App\Infrastructure\Database\RankingRepository;
+use App\Infrastructure\Database\SongIgnoreRepository;
 use App\Infrastructure\Database\SpotifyMatchRepository;
 use App\Infrastructure\Http\CurlHttpClient;
 use App\Infrastructure\Security\TokenCipher;
@@ -78,6 +81,22 @@ final class ApplicationFactory
         return new PlaylistRepository($this->connection());
     }
 
+    public function songIgnoreService(): SongIgnoreService
+    {
+        return new SongIgnoreService(new SongIgnoreRepository($this->connection()));
+    }
+
+    public function playlistTargetService(): PlaylistTargetService
+    {
+        $connection = $this->connection();
+
+        return new PlaylistTargetService(
+            $this->rankingService(),
+            new SpotifyMatchRepository($connection),
+            new SongIgnoreRepository($connection),
+        );
+    }
+
     /** @return array<string, string> */
     public function playlistCoverPaths(): array
     {
@@ -128,13 +147,12 @@ final class ApplicationFactory
         }
 
         return new PlaylistSyncService(
-            $this->rankingService(),
+            $this->playlistTargetService(),
             new MatchingService(
                 $spotify,
                 new MatchingEngine(),
                 new SpotifyMatchRepository($connection),
             ),
-            new SpotifyMatchRepository($connection),
             $this->playlistRepository(),
             $spotify,
             new AdvisoryLock($connection),

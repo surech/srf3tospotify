@@ -1,13 +1,14 @@
 # Quick Reference
 
 **Project:** SRF3ToSpotify
-**Last updated:** 2026-09-03
+**Last updated:** 2026-09-22
 **Status:** DRAFT
 
 | Version | Date | Author | Change summary |
 | --- | --- | --- | --- |
 | 0.1 | 2026-08-26 | GitHub Copilot | Initial greenfield draft |
 | 0.2 | 2026-09-03 | GitHub Copilot | Added managed Spotify playlist covers |
+| 0.3 | 2026-09-22 | GitHub Copilot | Added historized song exclusions and deterministic playlist backfilling |
 
 | Key | Decision |
 | --- | --- |
@@ -27,6 +28,7 @@
 - Spotify matching is cached per logical song, reviewable, and manually overridable.
 - Playlist synchronization replaces the managed ranking instead of appending plays, preventing duplicates and stale entries.
 - Playlist synchronization uploads the bundled cover assigned to each managed playlist.
+- Playlist target selection excludes active global and playlist-specific song rules before filling fixed-size targets with the next unique accepted Spotify tracks.
 - Credentials and encryption keys remain outside the public document root and outside version control.
 
 ## Assumptions

@@ -22,8 +22,27 @@ final readonly class RankingRepository
         int $limit,
         ?RankingFilter $filter = null,
     ): array {
-        $filter ??= new RankingFilter();
+        return $this->rankedSongs($fromUtc, $toUtcExclusive, $filter ?? new RankingFilter(), $limit);
+    }
+
+    /** @return list<RankingEntry> */
+    public function allSongs(
+        DateTimeImmutable $fromUtc,
+        DateTimeImmutable $toUtcExclusive,
+        ?RankingFilter $filter = null,
+    ): array {
+        return $this->rankedSongs($fromUtc, $toUtcExclusive, $filter ?? new RankingFilter());
+    }
+
+    /** @return list<RankingEntry> */
+    private function rankedSongs(
+        DateTimeImmutable $fromUtc,
+        DateTimeImmutable $toUtcExclusive,
+        RankingFilter $filter,
+        ?int $limit = null,
+    ): array {
         $where = implode(' AND ', $this->conditions($filter));
+        $limitClause = $limit === null ? '' : 'LIMIT :limit';
 
         $query = $this->connection->prepare(
             <<<SQL
@@ -44,11 +63,13 @@ final readonly class RankingRepository
                     sm.spotify_track_id, sm.status
                 ORDER BY play_count DESC, last_played_at_utc DESC,
                     s.normalized_artist ASC, s.normalized_title ASC
-                LIMIT :limit
+                {$limitClause}
                 SQL,
         );
         $this->bindWindowAndFilter($query, $fromUtc, $toUtcExclusive, $filter);
-        $query->bindValue('limit', $limit, PDO::PARAM_INT);
+        if ($limit !== null) {
+            $query->bindValue('limit', $limit, PDO::PARAM_INT);
+        }
         $query->execute();
 
         $entries = [];

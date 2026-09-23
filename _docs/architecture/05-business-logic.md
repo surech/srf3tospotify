@@ -20,8 +20,20 @@
 - Reconstruct each play's Swiss local weekday and time from UTC timestamp plus stored source offset, including daylight-saving changes.
 - Group by logical `song.id`, not raw title spelling from individual plays.
 - Sort by play count descending, latest play descending, normalized artist ascending, normalized title ascending.
-- Return at most `max_tracks`; default under A-003 is 50.
-- Songs without an accepted Spotify match remain visible but are omitted from playlist output and counted as unresolved.
+- Traverse the complete policy-specific ranking until `target_tracks` unique accepted Spotify tracks have been selected or the candidate pool is exhausted; never exceed `max_tracks`.
+- Exclude active global rules and rules for the current playlist before accepting a candidate. Airplay history and general statistics remain unchanged.
+- Excluding one logical song also excludes aliases mapped to its current accepted Spotify track ID. Distinct Spotify track IDs for live, remix or edit variants remain eligible.
+- Songs without an accepted Spotify match and duplicate Spotify track IDs are skipped; lower-ranked unique accepted tracks fill the remaining target positions.
+- The playlist page displays the final contiguous target positions and a secondary list of examined missing-match or duplicate candidates with original airplay rank and reason. Active exclusions are not displayed there.
+
+## Ignored Song Rules
+
+- An owner may create a playlist-specific rule or a global rule. Global rules apply to existing and future playlists.
+- Reasons are optional, trimmed, and limited to 500 characters. Scope and reason are immutable after creation.
+- Global and playlist-specific periods remain independent. Reactivating a global period does not close active playlist-specific periods.
+- A global period may be added while playlist-specific periods exist. A new playlist-specific period is rejected while a global period is active.
+- Only one active period per song and scope is allowed. Reactivation closes the period; ignoring the song later creates a new period.
+- New or reactivated rules affect the web preview immediately and Spotify only from the next synchronization started after the change.
 
 ## Matching Rules
 
@@ -35,7 +47,8 @@
 ## Playlist Synchronization
 
 - Acquire a MariaDB advisory lock before calculating the desired playlist.
-- Load every configured playlist and calculate its ranking policy independently within the same locked synchronization.
+- Load every configured playlist and snapshot all effective exclusions once within the advisory lock. Rule changes made while the run is active apply to the next run.
+- Calculate each playlist target independently from its complete airplay ranking, accepted matches and exclusion snapshot.
 - Persist the ordered desired snapshot before calling Spotify.
 - Create each configured playlist once through `POST /v1/me/playlists` when no playlist ID exists.
 - Convert each configured PNG cover to JPEG and upload it through `PUT /v1/playlists/{playlist_id}/images` on every synchronization.
@@ -44,6 +57,7 @@
 - On failure, retain the desired snapshot and previous successful run metadata for retry and diagnosis.
 - Attempt every configured playlist even if another target fails; report the overall call as failed after all attempts.
 - Repeating synchronization with the same ranking yields the same URI sequence.
+- Fixed-size targets with too few eligible tracks are still published successfully. The run records a warning with requested/actual counts and aggregate ignored, missing-match and duplicate causes.
 
 ## Import Sequence
 
@@ -76,14 +90,15 @@ sequenceDiagram
     participant DB as MariaDB
     participant Spotify as Spotify API
     Trigger->>App: synchronize
-    App->>DB: acquire lock and load playlist configurations
+    App->>DB: acquire lock, load configurations and snapshot exclusions
     loop configured playlists
-        App->>DB: calculate policy-specific ranking
-        loop unresolved ranked songs
+        App->>DB: calculate complete policy-specific ranking
+        loop candidates until target is full
             App->>Spotify: search track
             Spotify-->>App: up to 10 candidates
             App->>DB: persist accepted/review match
         end
+        App->>App: exclude rules and duplicate tracks; backfill from lower ranks
         App->>DB: persist ordered desired snapshot
         App->>Spotify: refresh access token if required
         App->>Spotify: upload JPEG playlist cover
@@ -92,10 +107,10 @@ sequenceDiagram
             App->>Spotify: append remaining batches
         end
         Spotify-->>App: snapshot ID
-        App->>DB: mark playlist sync succeeded
+        App->>DB: mark sync succeeded with target diagnostics
     end
     App->>DB: release lock
-    App-->>Trigger: aggregate result and unresolved count
+    App-->>Trigger: aggregate result, warning flag and cause counts
 ```
 
 ## Failure and Retry Rules

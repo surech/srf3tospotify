@@ -17,8 +17,11 @@ The web surface is a server-rendered owner dashboard. JSON responses are used fo
 | `POST` | `/login` | Public + CSRF | Verify owner password and rotate session ID |
 | `POST` | `/logout` | Session + CSRF | Destroy owner session |
 | `GET` | `/` | Session | Status, recent runs, configured playlists and unresolved matches |
-| `GET` | `/playlists/{playlistId}` | Session | Playlist metadata and current ranking using the playlist synchronization rules |
+| `GET` | `/playlists/{playlistId}` | Session | Next synchronization target, examined skipped candidates and playlist metadata |
 | `GET` | `/playlists/{playlistId}/cover` | Session | Configured PNG cover; `404` when the playlist or cover is unavailable |
+| `GET` | `/ignored-songs` | Session | Active ignored songs grouped by song; query `history=1` includes closed periods |
+| `POST` | `/ignored-songs` | Session + CSRF | Body: `song_id`, scope `playlist` or `global`, optional `playlist_id`, optional `reason` up to 500 characters |
+| `POST` | `/ignored-songs/{ruleId}/reactivate` | Session + CSRF | Close one active ignore-rule period; the song qualifies normally again |
 | `POST` | `/actions/import` | Session + CSRF | Body: `from_date`, `to_date`; synchronous import result |
 | `POST` | `/actions/sync` | Session + CSRF | Build and synchronize all configured playlist rankings |
 | `POST` | `/matches/{songId}` | Session + CSRF | Body: Spotify track URL/ID or `rejected`; save manual override |
@@ -71,30 +74,43 @@ Top-level playlist identifiers and counts refer to the first configured playlist
   "playlist_count": 2,
   "track_count": 50,
   "unresolved_count": 0,
+  "has_warnings": false,
   "total_track_count": 100,
+  "total_requested_count": 100,
   "total_unresolved_count": 0,
+  "total_ignored_count": 0,
+  "total_duplicate_track_count": 0,
   "playlists": [
     {
       "name": "SRF 3 - Top 50",
       "correlation_id": "0198e7d8-4f23-7b42-a5d2-7a64dd91f790",
       "playlist_id": "spotify-top-50",
       "snapshot_id": "snapshot-top-50",
+      "requested_count": 50,
       "track_count": 50,
-      "unresolved_count": 0
+      "unresolved_count": 0,
+      "ignored_count": 0,
+      "duplicate_track_count": 0,
+      "has_warning": false
     },
     {
       "name": "SRF 3 - Der Morgen",
       "correlation_id": "0198e7d8-4f23-7b42-a5d2-7a64dd91f791",
       "playlist_id": "spotify-morning",
       "snapshot_id": "snapshot-morning",
+      "requested_count": 50,
       "track_count": 50,
-      "unresolved_count": 0
+      "unresolved_count": 0,
+      "ignored_count": 0,
+      "duplicate_track_count": 0,
+      "has_warning": false
     }
   ]
 }
 ```
 
 - Browser action validation errors return `422`.
+- Browser ignore actions redirect back to the source playlist or management page and expose a session flash message. They never trigger Spotify synchronization directly.
 - Unknown or invalid playlist IDs return an HTML `404` page.
 - Authentication failures return `401`; authorization/CSRF failures return `403`.
 - Lock contention returns `409` with the active run correlation ID when available.

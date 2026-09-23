@@ -6,6 +6,7 @@ namespace App\Infrastructure\Database;
 
 use App\Application\Ranking\RankingEntry;
 use App\Application\Ranking\RankingFilter;
+use App\Application\Spotify\PlaylistTarget;
 use DateTimeImmutable;
 use DateTimeZone;
 use PDO;
@@ -25,7 +26,7 @@ final readonly class PlaylistRepository
     public function configurations(): array
     {
         $query = $this->connection->query(
-            'SELECT id, spotify_playlist_id, spotify_owner_id, name, description, ranking_days, max_tracks, '
+            'SELECT id, spotify_playlist_id, spotify_owner_id, name, description, ranking_days, max_tracks, target_tracks, '
             . 'weekdays_only, local_start_minute, local_end_minute, is_public, fixed_from_utc, fixed_to_utc '
             . 'FROM playlists ORDER BY id',
         );
@@ -43,6 +44,7 @@ final readonly class PlaylistRepository
                 (string) $row['description'],
                 (int) $row['ranking_days'],
                 (int) $row['max_tracks'],
+                $row['target_tracks'] === null ? null : (int) $row['target_tracks'],
                 new RankingFilter(
                     (bool) $row['weekdays_only'],
                     $row['local_start_minute'] === null ? null : (int) $row['local_start_minute'],
@@ -71,6 +73,19 @@ final readonly class PlaylistRepository
             'spotify_owner_id' => $spotifyOwnerId,
             'id' => $playlistId,
         ]);
+    }
+
+    public function lastSuccessfulSyncAt(int $playlistId): ?DateTimeImmutable
+    {
+        $query = $this->connection->prepare(
+            "SELECT MAX(finished_at) FROM sync_runs WHERE playlist_id = :playlist_id AND status = 'succeeded'",
+        );
+        $query->execute(['playlist_id' => $playlistId]);
+        $value = $query->fetchColumn();
+
+        return $value === false || $value === null
+            ? null
+            : new DateTimeImmutable((string) $value, new DateTimeZone('UTC'));
     }
 
     public function startRun(
@@ -138,19 +153,25 @@ final readonly class PlaylistRepository
         }
     }
 
-    public function finishRun(int $runId, string $snapshotId, int $unresolvedCount): void
+    public function finishRun(int $runId, string $snapshotId, int $requestedCount, PlaylistTarget $target): void
     {
         $query = $this->connection->prepare(
             <<<'SQL'
                 UPDATE sync_runs
                 SET status = 'succeeded', spotify_snapshot_id = :snapshot_id,
-                    unresolved_count = :unresolved_count, finished_at = CURRENT_TIMESTAMP(6)
+                    unresolved_count = :unresolved_count, requested_count = :requested_count,
+                    track_count = :track_count, ignored_count = :ignored_count,
+                    duplicate_track_count = :duplicate_track_count, finished_at = CURRENT_TIMESTAMP(6)
                 WHERE id = :id
                 SQL,
         );
         $query->execute([
             'snapshot_id' => $snapshotId,
-            'unresolved_count' => $unresolvedCount,
+            'unresolved_count' => $target->missingMatchCount,
+            'requested_count' => $requestedCount,
+            'track_count' => \count($target->desired),
+            'ignored_count' => $target->ignoredCount,
+            'duplicate_track_count' => $target->duplicateTrackCount,
             'id' => $runId,
         ]);
     }
