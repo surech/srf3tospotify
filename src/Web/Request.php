@@ -16,6 +16,7 @@ final readonly class Request
         public array $query = [],
         public array $form = [],
         public array $headers = [],
+        public string $clientAddress = 'unknown',
     ) {}
 
     public static function fromGlobals(): self
@@ -46,6 +47,7 @@ final readonly class Request
             self::stringValues($_GET),
             self::stringValues($_POST),
             $headers,
+            \is_string($_SERVER['REMOTE_ADDR'] ?? null) ? $_SERVER['REMOTE_ADDR'] : 'unknown',
         );
     }
 

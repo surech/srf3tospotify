@@ -88,6 +88,111 @@ final readonly class PlaylistRepository
             : new DateTimeImmutable((string) $value, new DateTimeZone('UTC'));
     }
 
+    /**
+     * @return list<array{
+     *     id: int,
+     *     configured_name: string,
+     *     name: string,
+     *     description: string,
+     *     spotify_playlist_id: string,
+     *     synced_at: DateTimeImmutable,
+     *     tracks: list<array{position: int, spotify_track_id: string, title: string, artist: string}>
+     * }>
+     */
+    public function publishedPlaylists(): array
+    {
+        $query = $this->connection->query(
+            <<<'SQL'
+                SELECT p.id, p.name AS configured_name,
+                    sr.published_name, sr.published_description, sr.published_spotify_playlist_id,
+                    sr.finished_at, sri.position, sri.spotify_track_id, sri.spotify_title, sri.spotify_artist
+                FROM playlists p
+                INNER JOIN (
+                    SELECT playlist_id, MAX(id) AS sync_run_id
+                    FROM sync_runs
+                    WHERE status = 'succeeded'
+                    GROUP BY playlist_id
+                ) latest ON latest.playlist_id = p.id
+                INNER JOIN sync_runs sr ON sr.id = latest.sync_run_id
+                INNER JOIN sync_run_items sri ON sri.sync_run_id = sr.id
+                WHERE p.is_public = 1
+                    AND p.spotify_playlist_id IS NOT NULL
+                    AND p.spotify_playlist_id = sr.published_spotify_playlist_id
+                    AND sr.published_public = 1
+                    AND sr.track_count > 0
+                ORDER BY p.id, sri.position
+                SQL,
+        );
+        if ($query === false) {
+            throw new RuntimeException('Unable to load published playlists.');
+        }
+
+        $playlists = [];
+        while (($row = $query->fetch()) !== false) {
+            $playlistId = (int) $row['id'];
+            if (!isset($playlists[$playlistId])) {
+                foreach (['published_name', 'published_description', 'published_spotify_playlist_id', 'finished_at'] as $field) {
+                    if (!\is_string($row[$field])) {
+                        throw new RuntimeException('Published playlist snapshot is incomplete.');
+                    }
+                }
+                $playlists[$playlistId] = [
+                    'id' => $playlistId,
+                    'configured_name' => (string) $row['configured_name'],
+                    'name' => $row['published_name'],
+                    'description' => $row['published_description'],
+                    'spotify_playlist_id' => $row['published_spotify_playlist_id'],
+                    'synced_at' => new DateTimeImmutable($row['finished_at'], new DateTimeZone('UTC')),
+                    'tracks' => [],
+                ];
+            }
+            if (!\is_string($row['spotify_title']) || !\is_string($row['spotify_artist'])) {
+                throw new RuntimeException('Published track snapshot is incomplete.');
+            }
+            $playlists[$playlistId]['tracks'][] = [
+                'position' => (int) $row['position'] + 1,
+                'spotify_track_id' => (string) $row['spotify_track_id'],
+                'title' => $row['spotify_title'],
+                'artist' => $row['spotify_artist'],
+            ];
+        }
+
+        $result = array_values($playlists);
+        usort(
+            $result,
+            static fn(array $left, array $right): int => strnatcasecmp($left['name'], $right['name']),
+        );
+
+        return $result;
+    }
+
+    public function isPublished(int $playlistId): bool
+    {
+        $query = $this->connection->prepare(
+            <<<'SQL'
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM playlists p
+                    INNER JOIN sync_runs sr ON sr.id = (
+                        SELECT MAX(latest.id)
+                        FROM sync_runs latest
+                        WHERE latest.playlist_id = p.id AND latest.status = 'succeeded'
+                    )
+                    WHERE p.id = :playlist_id
+                        AND p.is_public = 1
+                        AND p.spotify_playlist_id IS NOT NULL
+                        AND p.spotify_playlist_id = sr.published_spotify_playlist_id
+                        AND sr.published_public = 1
+                        AND sr.track_count > 0
+                        AND EXISTS (SELECT 1 FROM sync_run_items sri WHERE sri.sync_run_id = sr.id)
+                )
+                SQL,
+        );
+        $query->execute(['playlist_id' => $playlistId]);
+
+        return (bool) $query->fetchColumn();
+    }
+
     public function startRun(
         int $playlistId,
         string $correlationId,
@@ -121,9 +226,11 @@ final readonly class PlaylistRepository
         $query = $this->connection->prepare(
             <<<'SQL'
                 INSERT INTO sync_run_items (
-                    sync_run_id, position, song_id, spotify_match_id, spotify_track_id, play_count
+                    sync_run_id, position, song_id, spotify_match_id, spotify_track_id,
+                    spotify_title, spotify_artist, play_count
                 ) VALUES (
-                    :sync_run_id, :position, :song_id, :spotify_match_id, :spotify_track_id, :play_count
+                    :sync_run_id, :position, :song_id, :spotify_match_id, :spotify_track_id,
+                    :spotify_title, :spotify_artist, :play_count
                 )
                 SQL,
         );
@@ -141,6 +248,8 @@ final readonly class PlaylistRepository
                     'song_id' => $item['ranking']->songId,
                     'spotify_match_id' => $item['match']->id,
                     'spotify_track_id' => $trackId,
+                    'spotify_title' => $item['match']->title ?? $item['ranking']->title,
+                    'spotify_artist' => $item['match']->artist ?? $item['ranking']->artist,
                     'play_count' => $item['ranking']->playCount,
                 ]);
             }
@@ -153,12 +262,21 @@ final readonly class PlaylistRepository
         }
     }
 
-    public function finishRun(int $runId, string $snapshotId, int $requestedCount, PlaylistTarget $target): void
-    {
+    public function finishRun(
+        int $runId,
+        string $snapshotId,
+        int $requestedCount,
+        PlaylistTarget $target,
+        PlaylistConfiguration $configuration,
+        string $spotifyPlaylistId,
+    ): void {
         $query = $this->connection->prepare(
             <<<'SQL'
                 UPDATE sync_runs
                 SET status = 'succeeded', spotify_snapshot_id = :snapshot_id,
+                    published_name = :published_name, published_description = :published_description,
+                    published_spotify_playlist_id = :published_spotify_playlist_id,
+                    published_public = :published_public,
                     unresolved_count = :unresolved_count, requested_count = :requested_count,
                     track_count = :track_count, ignored_count = :ignored_count,
                     duplicate_track_count = :duplicate_track_count, finished_at = CURRENT_TIMESTAMP(6)
@@ -167,6 +285,10 @@ final readonly class PlaylistRepository
         );
         $query->execute([
             'snapshot_id' => $snapshotId,
+            'published_name' => $configuration->name,
+            'published_description' => $configuration->description,
+            'published_spotify_playlist_id' => $spotifyPlaylistId,
+            'published_public' => (int) $configuration->public,
             'unresolved_count' => $target->missingMatchCount,
             'requested_count' => $requestedCount,
             'track_count' => \count($target->desired),

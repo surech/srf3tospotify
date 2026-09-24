@@ -117,7 +117,12 @@ final readonly class PlaylistSyncService
                     $created->ownerId,
                 );
             } else {
-                $this->spotify->updatePlaylistVisibility($spotifyPlaylistId, $configuration->public);
+                $this->spotify->updatePlaylistDetails(
+                    $spotifyPlaylistId,
+                    $configuration->name,
+                    $configuration->description,
+                    $configuration->public,
+                );
             }
 
             $coverImage = $this->playlistCoverImages[$configuration->name] ?? null;
@@ -129,7 +134,14 @@ final readonly class PlaylistSyncService
             $snapshotId = $this->spotify->replacePlaylistItems($spotifyPlaylistId, $uris);
             $unresolved = $target->missingMatchCount;
             $requestedCount = $configuration->targetTracks ?? \count($desired);
-            $this->playlistRepository->finishRun($runId, $snapshotId, $requestedCount, $target);
+            $this->playlistRepository->finishRun(
+                $runId,
+                $snapshotId,
+                $requestedCount,
+                $target,
+                $configuration,
+                $spotifyPlaylistId,
+            );
             $result = new SynchronizedPlaylist(
                 $configuration->name,
                 $correlationId,

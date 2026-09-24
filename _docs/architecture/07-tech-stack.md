@@ -11,7 +11,7 @@
 | HTTP | PHP cURL extension behind a small transport interface | No runtime package required; controllable timeouts and headers |
 | Image processing | PHP GD extension | Converts bundled PNG covers to Spotify-compatible JPEG payloads |
 | Database | MariaDB with InnoDB via PDO | Hosting constraint, transactions, unique constraints and advisory locks |
-| UI | Server-rendered semantic HTML and project CSS | Single-owner workflow, minimal JavaScript and deployment footprint |
+| UI | Server-rendered semantic HTML and project CSS | Sessionless public reading, single-owner administration and minimal JavaScript |
 | Logging | JSON Lines to protected file and CLI streams | Searchable without external monitoring service |
 
 ## Development and Test

@@ -16,7 +16,9 @@ Ohne separate `public/`-Dokumentwurzel nicht deployen: Root-`.htaccess` blockier
 ```bash
 docker compose exec -T app composer quality
 docker compose exec -T app composer release
-sha256sum -c build/srf3tospotify-release.tar.gz.sha256
+cd build
+sha256sum -c srf3tospotify-release.tar.gz.sha256
+cd ..
 ```
 
 - FTP-Quelle: Inhalt aus `build/release/`
@@ -86,12 +88,13 @@ curl --fail https://DEINE-DOMAIN/health
 
 Erwartete Passwort-Hash-Diagnose: `length` ist `60`, `algorithm` ist `bcrypt` und `prefix` ist `$2y$10$`. Der vollständige Hash wird nicht ausgegeben.
 
-Danach Dashboard anmelden, einen vergangenen Tag importieren, denselben Tag erneut importieren und prüfen: zweiter Lauf `0` neue Datensätze.
+Danach `/` ohne Cookie aufrufen, unter `/admin` anmelden, einen vergangenen Tag importieren, denselben Tag erneut importieren und prüfen: zweiter Lauf `0` neue Datensätze.
 
 ## 7. Spotify verbinden
 
-- Callback im Spotify Dashboard: `https://DEINE-DOMAIN/spotify/callback`
-- Dashboard-Aktion **Spotify verbinden**
+- Vor dem Release zusätzlich registrieren: `https://DEINE-DOMAIN/admin/spotify/callback`
+- Nach erfolgreichem OAuth-Smoke-Test die alte Callback-URI im Spotify Dashboard entfernen
+- Admin-Aktion **Spotify verbinden** unter `/admin`
 - Nach einem Update von einer Version ohne Playlist-Cover **Spotify verbinden** erneut ausführen, um `ugc-image-upload` freizugeben
 - Playlists **SRF 3 - Top 50**, **SRF 3 - Der Morgen** und **SRF 3 - Schweizer Musiktag 2026** werden beim ersten Sync erstellt
 - Vor dem ersten Sync einmal `php bin/console import --from=2026-09-17 --to=2026-09-17` ausführen

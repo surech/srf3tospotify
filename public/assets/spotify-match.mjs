@@ -8,7 +8,7 @@ export function buildSpotifySearchUrl(origin, artist, title, offset) {
     throw new Error('Ungültige Seitennummer der Spotify-Suche.');
   }
 
-  const url = new URL('/spotify/tracks/search', origin);
+  const url = new URL('/admin/spotify/tracks/search', origin);
   url.searchParams.set('artist', normalizedArtist);
   url.searchParams.set('title', normalizedTitle);
   url.searchParams.set('offset', String(offset));

@@ -80,8 +80,41 @@ final class WebPlaylistOperationsTest extends TestCase
         self::assertNull($fallback['cover_url']);
 
         $top50 = $this->playlistByName($playlists, 'SRF 3 - Top 50');
-        self::assertSame('/playlists/' . $top50['id'] . '/cover', $top50['cover_url']);
+        self::assertSame('/admin/playlists/' . $top50['id'] . '/cover', $top50['cover_url']);
         self::assertStringStartsWith("\x89PNG", (string) $this->operations->playlistCover($top50['id']));
+    }
+
+    public function testPublicHomepageUsesLatestEligibleSuccessfulSnapshot(): void
+    {
+        $playlistId = $this->configurationId('SRF 3 - Top 50');
+        $this->createPublicSnapshot($playlistId, 'web-public-success', 'succeeded', 1);
+        $this->createPublicSnapshot($playlistId, 'web-public-failed', 'failed', 1);
+
+        $page = $this->operations->publicHomepage();
+
+        self::assertCount(1, $page['playlists']);
+        $playlist = $page['playlists'][0];
+        self::assertSame('Öffentliche Playlist', $playlist['name']);
+        self::assertSame('https://open.spotify.com/playlist/public-playlist', $playlist['spotify_url']);
+        self::assertSame('/playlist-covers/' . $playlistId, $playlist['cover_url']);
+        self::assertSame('24.09.2026, 12:00', $playlist['synced_at']);
+        self::assertSame(1, $playlist['track_count']);
+        self::assertSame([[
+            'position' => 1,
+            'title' => 'Snapshot Song',
+            'artist' => 'Snapshot Artist',
+            'spotify_url' => 'https://open.spotify.com/track/public-track',
+        ]], $playlist['tracks']);
+        self::assertStringStartsWith("\x89PNG", (string) $this->operations->publicPlaylistCover($playlistId));
+
+        $this->createPublicSnapshot($playlistId, 'web-public-empty', 'succeeded', 0);
+        self::assertSame([], $this->operations->publicHomepage()['playlists']);
+        self::assertNull($this->operations->publicPlaylistCover($playlistId));
+
+        $this->connection->exec("DELETE FROM sync_runs WHERE correlation_id = 'web-public-empty'");
+        $this->connection->exec("UPDATE playlists SET is_public = 0 WHERE id = {$playlistId}");
+        self::assertSame([], $this->operations->publicHomepage()['playlists']);
+        self::assertNull($this->operations->publicPlaylistCover($playlistId));
     }
 
     public function testPlaylistDetailUsesFixedWindowAndReturnsNullForUnknownId(): void
@@ -276,6 +309,89 @@ final class WebPlaylistOperationsTest extends TestCase
         );
     }
 
+    private function createPublicSnapshot(int $playlistId, string $correlationId, string $status, int $trackCount): void
+    {
+        $this->connection->exec(
+            "UPDATE playlists SET spotify_playlist_id = 'public-playlist', spotify_owner_id = 'public-owner', "
+            . "is_public = 1 WHERE id = {$playlistId}",
+        );
+        $run = $this->connection->prepare(
+            <<<'SQL'
+                INSERT INTO sync_runs (
+                    playlist_id, correlation_id, trigger_type, status, window_from_utc, window_to_utc,
+                    spotify_snapshot_id, published_name, published_description,
+                    published_spotify_playlist_id, published_public, track_count, finished_at
+                ) VALUES (
+                    :playlist_id, :correlation_id, 'manual', :status, '2026-09-01', '2026-09-24',
+                    'public-snapshot', 'Öffentliche Playlist', 'Öffentliche Beschreibung',
+                    'public-playlist', 1, :track_count, '2026-09-24 10:00:00'
+                )
+                SQL,
+        );
+        $run->execute([
+            'playlist_id' => $playlistId,
+            'correlation_id' => $correlationId,
+            'status' => $status,
+            'track_count' => $trackCount,
+        ]);
+        $runId = (int) $this->connection->lastInsertId();
+        if ($trackCount === 0) {
+            return;
+        }
+        $songId = $this->publicSongId();
+        $matchId = $this->publicMatchId($songId);
+        $item = $this->connection->prepare(
+            <<<'SQL'
+                INSERT INTO sync_run_items (
+                    sync_run_id, position, song_id, spotify_match_id, spotify_track_id,
+                    spotify_title, spotify_artist, play_count
+                ) VALUES (
+                    :sync_run_id, 0, :song_id, :spotify_match_id, 'public-track',
+                    'Snapshot Song', 'Snapshot Artist', 4
+                )
+                SQL,
+        );
+        $item->execute([
+            'sync_run_id' => $runId,
+            'song_id' => $songId,
+            'spotify_match_id' => $matchId,
+        ]);
+    }
+
+    private function publicSongId(): int
+    {
+        $query = $this->connection->query("SELECT id FROM songs WHERE title = 'Public Snapshot Song'");
+        if ($query !== false && ($songId = $query->fetchColumn()) !== false) {
+            return (int) $songId;
+        }
+        $insert = $this->connection->prepare(
+            "INSERT INTO songs (identity_hash, artist, title, normalized_artist, normalized_title) "
+            . "VALUES (:identity_hash, 'Public Snapshot Artist', 'Public Snapshot Song', "
+            . "'public snapshot artist', 'public snapshot song')",
+        );
+        $insert->execute(['identity_hash' => random_bytes(32)]);
+
+        return (int) $this->connection->lastInsertId();
+    }
+
+    private function publicMatchId(int $songId): int
+    {
+        $query = $this->connection->prepare('SELECT id FROM spotify_matches WHERE song_id = :song_id');
+        $query->execute(['song_id' => $songId]);
+        $matchId = $query->fetchColumn();
+        if ($matchId !== false) {
+            return (int) $matchId;
+        }
+        $insert = $this->connection->prepare(
+            "INSERT INTO spotify_matches (song_id, spotify_track_id, spotify_uri, spotify_title, spotify_artist, "
+            . "match_source, status) VALUES (:song_id, 'public-track', 'spotify:track:public-track', "
+            . "'Snapshot Song', 'Snapshot Artist', 'manual', 'accepted')",
+        );
+        $insert->execute(['song_id' => $songId]);
+
+        return (int) $this->connection->lastInsertId();
+    }
+
     private function play(string $playedAt): RadioPlay
     {
         return new RadioPlay(
@@ -290,6 +406,15 @@ final class WebPlaylistOperationsTest extends TestCase
 
     private function cleanup(): void
     {
+        $this->connection->exec("DELETE FROM sync_runs WHERE correlation_id LIKE 'web-public-%'");
+        $this->connection->exec(
+            "DELETE FROM spotify_matches WHERE song_id IN (SELECT id FROM songs WHERE title = 'Public Snapshot Song')",
+        );
+        $this->connection->exec("DELETE FROM songs WHERE title = 'Public Snapshot Song'");
+        $this->connection->exec(
+            "UPDATE playlists SET spotify_playlist_id = NULL, spotify_owner_id = NULL, is_public = 1 "
+            . "WHERE name = 'SRF 3 - Top 50' AND spotify_playlist_id = 'public-playlist'",
+        );
         $this->connection->exec('DELETE FROM song_ignore_rules');
         $this->connection->exec("DELETE FROM plays WHERE played_at_utc >= '2026-09-17' AND played_at_utc < '2026-09-18'");
         $this->connection->exec("DELETE FROM import_runs WHERE range_from_utc >= '2026-09-16' AND range_from_utc < '2026-09-18'");

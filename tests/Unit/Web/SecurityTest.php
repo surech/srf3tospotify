@@ -9,6 +9,7 @@ use App\Web\OAuthState;
 use App\Web\OwnerAuthentication;
 use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
+use Tests\Fakes\ArrayLoginRateLimiter;
 use Tests\Fakes\ArraySessionStore;
 
 #[CoversClass(OwnerAuthentication::class)]
@@ -19,12 +20,19 @@ final class SecurityTest extends TestCase
     public function testLoginRegeneratesSessionAndLogoutDestroysIt(): void
     {
         $session = new ArraySessionStore();
-        $authentication = new OwnerAuthentication($session, password_hash('correct', PASSWORD_DEFAULT));
+        $rateLimiter = new ArrayLoginRateLimiter();
+        $authentication = new OwnerAuthentication(
+            $session,
+            password_hash('correct', PASSWORD_DEFAULT),
+            $rateLimiter,
+        );
 
-        self::assertFalse($authentication->login('wrong'));
+        self::assertFalse($authentication->login('wrong', '192.0.2.1'));
         self::assertFalse($authentication->authenticated());
-        self::assertTrue($authentication->login('correct'));
+        self::assertSame(1, $rateLimiter->failures['192.0.2.1']);
+        self::assertTrue($authentication->login('correct', '192.0.2.1'));
         self::assertTrue($authentication->authenticated());
+        self::assertSame([], $rateLimiter->failures);
         self::assertSame(1, $session->regenerations);
 
         $authentication->logout();

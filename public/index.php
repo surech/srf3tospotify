@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 use App\ApplicationFactory;
 use App\Infrastructure\Database\DashboardRepository;
+use App\Infrastructure\Database\DatabaseLoginRateLimiter;
 use App\Support\Config;
 use App\Support\Environment;
+use App\Support\Uuid;
 use App\Web\CsrfGuard;
 use App\Web\DefaultWebOperations;
 use App\Web\NativeSessionStore;
@@ -46,7 +48,11 @@ try {
     );
     $application = new WebApplication(
         $operations,
-        new OwnerAuthentication($session, $config->string('ADMIN_PASSWORD_HASH')),
+        new OwnerAuthentication(
+            $session,
+            $config->string('ADMIN_PASSWORD_HASH'),
+            new DatabaseLoginRateLimiter($factory->connection(), $config->required('APP_KEY')),
+        ),
         new CsrfGuard($session),
         new OAuthState($session),
         $session,
@@ -57,10 +63,20 @@ try {
 
     $application->handle($request)->send();
 } catch (Throwable $exception) {
-    error_log(\sprintf('%s: %s', $exception::class, $exception->getMessage()));
+    $errorId = Uuid::v4();
+    error_log(\sprintf('[%s] %s: %s', $errorId, $exception::class, $exception->getMessage()));
+    if ($request->path === '/' || str_starts_with($request->path, '/playlist-covers/')) {
+        Response::html(
+            (new PageRenderer($root . '/templates'))->render('public-error', ['error_id' => $errorId]),
+            503,
+            ['Cache-Control' => 'no-store', 'Retry-After' => '60'],
+        )->send();
+    }
     Response::html(
-        '<!doctype html><html lang="de"><meta charset="utf-8"><title>Nicht verfügbar</title>'
-        . '<body><main><h1>Anwendung nicht verfügbar</h1><p>Konfiguration oder Datenbank prüfen.</p></main></body></html>',
+        '<!doctype html><html lang="de"><meta charset="utf-8"><meta name="robots" content="noindex">'
+        . '<title>Nicht verfügbar</title><body><main><h1>Anwendung nicht verfügbar</h1>'
+        . '<p>Fehler-ID: ' . htmlspecialchars($errorId, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p></main></body></html>',
         503,
+        ['X-Robots-Tag' => 'noindex, nofollow'],
     )->send();
 }

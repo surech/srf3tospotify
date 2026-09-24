@@ -54,6 +54,20 @@ final class MigratorTest extends TestCase
         $column = $columnStatement->fetch(PDO::FETCH_ASSOC);
         self::assertIsArray($column);
         self::assertSame('1', $column['Default']);
+
+        self::assertSame(1, $this->scalar("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'login_attempts'"));
+        self::assertSame(4, $this->scalar(
+            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'sync_runs' "
+            . "AND column_name IN ('published_name', 'published_description', 'published_spotify_playlist_id', 'published_public')",
+        ));
+        self::assertSame(2, $this->scalar(
+            "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'sync_run_items' "
+            . "AND column_name IN ('spotify_title', 'spotify_artist')",
+        ));
+        self::assertSame(2, $this->scalar(
+            "SELECT COUNT(*) FROM playlists WHERE name IN ('SRF 3 - Top 50', 'SRF 3 - Der Morgen') "
+            . "AND description LIKE 'Die meistgespielten Songs auf SRF 3%'",
+        ));
     }
 
     public function testDiagnosticMigrationsRecoverAfterDdlWithoutRegistration(): void

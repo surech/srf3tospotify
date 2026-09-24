@@ -28,6 +28,50 @@ final readonly class DefaultWebOperations implements WebOperations
         private ?SpotifyGateway $spotify = null,
     ) {}
 
+    public function publicHomepage(): array
+    {
+        $timezone = new DateTimeZone('Europe/Zurich');
+        $coverPaths = $this->factory->playlistCoverPaths();
+
+        return ['playlists' => array_map(
+            static function (array $playlist) use ($timezone, $coverPaths): array {
+                $coverPath = $coverPaths[$playlist['configured_name']] ?? null;
+                $syncedAt = $playlist['synced_at']->setTimezone($timezone);
+
+                return [
+                    'id' => $playlist['id'],
+                    'name' => $playlist['name'],
+                    'description' => $playlist['description'],
+                    'cover_url' => $coverPath !== null && is_file($coverPath) && is_readable($coverPath)
+                        ? '/playlist-covers/' . $playlist['id']
+                        : null,
+                    'spotify_url' => 'https://open.spotify.com/playlist/'
+                        . rawurlencode($playlist['spotify_playlist_id']),
+                    'synced_at' => $syncedAt->format('d.m.Y, H:i'),
+                    'synced_at_datetime' => $syncedAt->format(DATE_ATOM),
+                    'track_count' => \count($playlist['tracks']),
+                    'tracks' => array_map(static fn(array $track): array => [
+                        'position' => $track['position'],
+                        'title' => $track['title'],
+                        'artist' => $track['artist'],
+                        'spotify_url' => 'https://open.spotify.com/track/'
+                            . rawurlencode($track['spotify_track_id']),
+                    ], $playlist['tracks']),
+                ];
+            },
+            $this->factory->playlistRepository()->publishedPlaylists(),
+        )];
+    }
+
+    public function publicPlaylistCover(int $playlistId): ?string
+    {
+        if (!$this->factory->playlistRepository()->isPublished($playlistId)) {
+            return null;
+        }
+
+        return $this->playlistCover($playlistId);
+    }
+
     public function dashboard(): array
     {
         return [
@@ -281,7 +325,7 @@ final readonly class DefaultWebOperations implements WebOperations
             'name' => $configuration->name,
             'description' => $configuration->description,
             'cover_url' => $coverPath !== null && is_file($coverPath) && is_readable($coverPath)
-                ? '/playlists/' . $configuration->id . '/cover'
+                ? '/admin/playlists/' . $configuration->id . '/cover'
                 : null,
         ];
     }

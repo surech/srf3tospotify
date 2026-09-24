@@ -9,6 +9,12 @@ use Throwable;
 
 final class FakeWebOperations implements WebOperations
 {
+    /** @var array<string, mixed> */
+    public array $publicHomepageData = ['playlists' => []];
+
+    /** @var array<int, string> */
+    public array $publicPlaylistCovers = [];
+
     /** @var list<array{from: string, to: string, trigger: string}> */
     public array $imports = [];
 
@@ -86,9 +92,24 @@ final class FakeWebOperations implements WebOperations
     public int $migrations = 0;
 
     public ?Throwable $dashboardException = null;
+    public ?Throwable $publicHomepageException = null;
     public ?Throwable $importException = null;
     public ?Throwable $synchronizeException = null;
     public ?Throwable $spotifySearchException = null;
+
+    public function publicHomepage(): array
+    {
+        if ($this->publicHomepageException !== null) {
+            throw $this->publicHomepageException;
+        }
+
+        return $this->publicHomepageData;
+    }
+
+    public function publicPlaylistCover(int $playlistId): ?string
+    {
+        return $this->publicPlaylistCovers[$playlistId] ?? null;
+    }
 
     public function dashboard(): array
     {

@@ -186,7 +186,7 @@ final class PlaylistSyncServiceTest extends TestCase
         self::assertSame('SRF 3 - Der Morgen', $serializedMorning['name']);
     }
 
-    public function testUpdatesVisibilityOfExistingPlaylists(): void
+    public function testUpdatesDetailsOfExistingPlaylists(): void
     {
         $this->connection->exec(
             "UPDATE playlists SET spotify_playlist_id = CASE name
@@ -207,10 +207,16 @@ final class PlaylistSyncServiceTest extends TestCase
             'existing-musiktag',
         ], $spotify->playlistExistenceChecks);
         self::assertSame([
-            ['playlist_id' => 'existing-top-50', 'public' => true],
-            ['playlist_id' => 'existing-morning', 'public' => true],
-            ['playlist_id' => 'existing-musiktag', 'public' => true],
-        ], $spotify->visibilityUpdates);
+            'existing-top-50',
+            'existing-morning',
+            'existing-musiktag',
+        ], array_column($spotify->playlistUpdates, 'playlistId'));
+        self::assertSame([
+            'SRF 3 - Top 50',
+            'SRF 3 - Der Morgen',
+            'SRF 3 - Schweizer Musiktag 2026',
+        ], array_column($spotify->playlistUpdates, 'name'));
+        self::assertSame([true, true, true], array_column($spotify->playlistUpdates, 'public'));
     }
 
     public function testSynchronizesSchweizerMusiktagWithinFixedSwissWindow(): void

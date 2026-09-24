@@ -19,7 +19,19 @@ final readonly class MaintenanceRepository
         try {
             $parameters = ['cutoff' => $cutoff->format('Y-m-d H:i:s.u')];
             $syncQuery = $this->connection->prepare(
-                'DELETE FROM sync_runs WHERE finished_at IS NOT NULL AND finished_at < :cutoff',
+                <<<'SQL'
+                    DELETE old_run
+                    FROM sync_runs old_run
+                    LEFT JOIN (
+                        SELECT playlist_id, MAX(id) AS sync_run_id
+                        FROM sync_runs
+                        WHERE status = 'succeeded'
+                        GROUP BY playlist_id
+                    ) retained ON retained.sync_run_id = old_run.id
+                    WHERE old_run.finished_at IS NOT NULL
+                        AND old_run.finished_at < :cutoff
+                        AND retained.sync_run_id IS NULL
+                    SQL,
             );
             $syncQuery->execute($parameters);
 
