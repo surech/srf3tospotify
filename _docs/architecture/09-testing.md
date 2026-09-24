@@ -26,8 +26,13 @@
 - Spotify search preserves editable inputs on errors, reports rate-limit retry timing, paginates by 10 and never preselects a result.
 - Desired playlist contains unique tracks in deterministic ranking order.
 - Dashboard lists every configured playlist alphabetically and uses a neutral fallback when no cover is mapped.
+- Public homepage remains sessionless, renders only the latest eligible non-empty public snapshots and exposes no mutation controls.
+- Public Spotify links use snapshot IDs; private, empty, failed-only and unknown playlists and covers remain hidden.
+- Public load failures return generic `503` pages with correlation IDs and no exception details.
 - Playlist detail rankings use the same rolling or fixed time window, filters and track limit as synchronization.
-- Playlist detail and cover routes require the owner session; unknown playlist IDs return `404`.
+- Admin playlist detail and cover routes require the owner session; all legacy browser paths return `404`.
+- Five failed logins are accepted per HMAC-keyed client window; later attempts return `429`, and another client remains unaffected.
+- Cleanup preserves each playlist's newest successful snapshot and removes older completed runs.
 - Spotify `429` honors `Retry-After` and leaves a retryable run.
 - Secrets, access tokens and refresh tokens never appear in rendered pages or logs.
 

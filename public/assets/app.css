@@ -255,6 +255,48 @@ tbody tr:hover { background: #fafbfb; }
 .login-panel > .button { margin-top: 20px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
+.public-page { min-height: 100vh; display: flex; flex-direction: column; background-color: #f3f5f4; }
+.public-header { color: #fff; background: var(--ink); border-bottom: 5px solid var(--signal); }
+.public-header-inner { min-height: 76px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.public-brand { display: inline-flex; align-items: center; color: inherit; font-size: 17px; font-weight: 800; text-decoration: none; text-transform: uppercase; }
+.public-brand span { display: inline-grid; width: 28px; height: 28px; margin-inline: 3px 7px; place-items: center; color: #fff; background: var(--signal); }
+.public-header .button-secondary { color: #fff; background: transparent; border-color: #666c73; }
+.public-intro { position: relative; padding: 54px 0 48px; overflow: hidden; background: var(--surface); border-bottom: 1px solid var(--line); }
+.public-intro::after { position: absolute; top: 0; right: max(20px, calc((100vw - 1180px) / 2)); width: 9px; height: 100%; content: ""; background: var(--signal); }
+.public-intro-inner { padding-right: 50px; }
+.public-intro h1 { max-width: 760px; font-size: 54px; line-height: 1.02; }
+.public-intro h1 + p { max-width: 720px; margin: 20px 0 0; color: #464c53; font-size: 18px; line-height: 1.55; }
+.public-playlists { flex: 1; padding-block: 38px 70px; }
+.public-playlists > .section-heading { padding-bottom: 4px; }
+.public-empty { margin: 0; padding: 32px 0; color: var(--muted); border-block: 1px solid var(--line); }
+.public-playlist-list { border-top: 1px solid var(--line); }
+.public-playlist { padding: 26px 0; border-bottom: 1px solid var(--line); }
+.public-playlist-summary { display: grid; grid-template-columns: 132px minmax(0, 1fr) auto; gap: 24px; align-items: center; }
+.public-playlist-cover { display: block; width: 132px; height: 132px; object-fit: cover; border-radius: var(--radius); }
+.public-cover-placeholder { display: flex; align-items: center; justify-content: center; color: #fff; background: var(--ink); font-size: 18px; font-weight: 800; }
+.public-cover-placeholder span { display: inline-grid; width: 32px; height: 32px; margin-left: 3px; place-items: center; background: var(--signal); }
+.public-playlist-copy { min-width: 0; }
+.public-playlist-copy h3 { margin: 0; overflow-wrap: anywhere; font-family: "Iowan Old Style", "Palatino Linotype", serif; font-size: 28px; line-height: 1.12; }
+.public-playlist-copy > p { max-width: 720px; margin: 9px 0 0; color: #4d535a; }
+.public-playlist-copy .public-updated { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.public-spotify-link { min-width: 154px; color: #fff; background: var(--spotify); }
+.public-spotify-link:hover { background: var(--spotify-dark); }
+.public-tracks { margin: 20px 0 0 156px; border-top: 1px solid var(--line); }
+.public-tracks summary { width: fit-content; min-height: 44px; padding: 12px 0 8px; color: var(--focus); cursor: pointer; font-weight: 800; list-style-position: inside; }
+.public-tracks ol { margin: 5px 0 0; padding: 0; list-style: none; counter-reset: public-track; border-top: 1px solid var(--line); }
+.public-tracks li { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 58px; padding: 8px 0; border-bottom: 1px solid #dfe3e1; counter-increment: public-track; }
+.public-tracks li::before { color: var(--muted); content: counter(public-track); font-size: 12px; font-variant-numeric: tabular-nums; }
+.public-tracks li > span { display: grid; min-width: 0; }
+.public-tracks li strong, .public-tracks li small { overflow-wrap: anywhere; }
+.public-tracks li small { color: var(--muted); font-size: 12px; }
+.public-tracks li > a { color: var(--focus); font-size: 12px; font-weight: 800; text-underline-offset: 3px; }
+.public-footer { padding: 24px 0; color: #d5d9dc; background: var(--ink); font-size: 12px; }
+.public-error { flex: 1; padding-block: 15vh 70px; }
+.public-error h1 { max-width: 780px; }
+.public-error > p:not(.eyebrow) { max-width: 650px; color: var(--muted); font-size: 17px; }
+.public-error-id { margin-top: 25px; font-size: 12px !important; }
+.public-error .button { margin-top: 14px; }
+
 @media (max-width: 850px) {
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .metrics div:nth-child(2) { border-right: 0; }
@@ -269,6 +311,10 @@ tbody tr:hover { background: #fafbfb; }
   .match-dialog-trigger { justify-self: start; }
   .runs-grid { grid-template-columns: 1fr; }
   .ignored-song-heading { align-items: flex-start; }
+  .public-playlist-summary { grid-template-columns: 112px minmax(0, 1fr); }
+  .public-playlist-cover { width: 112px; height: 112px; }
+  .public-spotify-link { grid-column: 2; justify-self: start; }
+  .public-tracks { margin-left: 136px; }
 }
 
 @media (max-width: 560px) {
@@ -307,4 +353,24 @@ tbody tr:hover { background: #fafbfb; }
   .spotify-result-link { padding-left: 44px; }
   .current-match { align-items: flex-start; flex-direction: column; }
   .login-panel { padding: 26px 22px; }
+  .public-header-inner { min-height: 68px; }
+  .public-header .button { padding-inline: 10px; }
+  .public-intro { padding-block: 38px 34px; }
+  .public-intro::after { right: 12px; width: 5px; }
+  .public-intro-inner { padding-right: 28px; }
+  .public-intro h1 { font-size: 38px; }
+  .public-intro h1 + p { margin-top: 16px; font-size: 16px; }
+  .public-playlists { padding-block: 28px 50px; }
+  .public-playlist { padding-block: 20px; }
+  .public-playlist-summary { grid-template-columns: 82px minmax(0, 1fr); gap: 14px; align-items: start; }
+  .public-playlist-cover { width: 82px; height: 82px; }
+  .public-cover-placeholder { font-size: 13px; }
+  .public-cover-placeholder span { width: 24px; height: 24px; }
+  .public-playlist-copy h3 { font-size: 21px; }
+  .public-playlist-copy > p { font-size: 13px; }
+  .public-spotify-link { grid-column: 1 / -1; width: 100%; }
+  .public-tracks { margin: 16px 0 0; }
+  .public-tracks li { grid-template-columns: 28px minmax(0, 1fr) auto; gap: 8px; }
+  .public-tracks li > a { padding: 8px 0 8px 8px; }
+  .public-footer { line-height: 1.55; }
 }

@@ -1,10 +1,12 @@
 # API Specification
 
-The web surface is a server-rendered owner dashboard. JSON responses are used for action results and cron integration; this is not a public API.
+The web surface consists of a server-rendered read-only homepage and a protected owner dashboard. No public JSON API exists.
 
 ## Authentication
 
-- Owner routes require an authenticated PHP session backed by `ADMIN_PASSWORD_HASH`.
+- Owner routes under `/admin` require an authenticated PHP session backed by `ADMIN_PASSWORD_HASH`.
+- The admin cookie is named `srf3spotify_admin_session`, scoped to `/admin`, `HttpOnly`, `SameSite=Lax` and `Secure` on HTTPS.
+- Five failed logins per HMAC-keyed `REMOTE_ADDR` in 15 minutes are allowed; subsequent attempts return `429` with `Retry-After`.
 - State-changing owner routes require same-site secure cookies and a CSRF token.
 - Cron HTTP fallback requires `Authorization: Bearer <CRON_TOKEN>` and accepts no token in the URL.
 - OAuth callback validates a one-time state value stored in the owner session.
@@ -13,27 +15,29 @@ The web surface is a server-rendered owner dashboard. JSON responses are used fo
 
 | Method | Path | Authorization | Contract |
 | --- | --- | --- | --- |
-| `GET` | `/login` | Public | Login form |
-| `POST` | `/login` | Public + CSRF | Verify owner password and rotate session ID |
-| `POST` | `/logout` | Session + CSRF | Destroy owner session |
-| `GET` | `/` | Session | Status, recent runs, configured playlists and unresolved matches |
-| `GET` | `/playlists/{playlistId}` | Session | Next synchronization target, examined skipped candidates and playlist metadata |
-| `GET` | `/playlists/{playlistId}/cover` | Session | Configured PNG cover; `404` when the playlist or cover is unavailable |
-| `GET` | `/ignored-songs` | Session | Active ignored songs grouped by song; query `history=1` includes closed periods |
-| `POST` | `/ignored-songs` | Session + CSRF | Body: `song_id`, scope `playlist` or `global`, optional `playlist_id`, optional `reason` up to 500 characters |
-| `POST` | `/ignored-songs/{ruleId}/reactivate` | Session + CSRF | Close one active ignore-rule period; the song qualifies normally again |
-| `POST` | `/actions/import` | Session + CSRF | Body: `from_date`, `to_date`; synchronous import result |
-| `POST` | `/actions/sync` | Session + CSRF | Build and synchronize all configured playlist rankings |
-| `GET` | `/spotify/tracks/search` | Session | Query: optional `title`, optional `artist`, 10-aligned `offset` from 0 to 1000; at least one search term; returns 10 CH-market tracks and `has_more` |
-| `POST` | `/matches/{songId}` | Session + CSRF | Body: `action=select` with Spotify track URL/ID, or `action=reset`; optional safe `return_to` for dashboard/playlist reload |
-| `GET` | `/spotify/authorize` | Session | Redirect to Spotify Authorization Code Flow |
-| `GET` | `/spotify/callback` | Session + OAuth state | Exchange code and store encrypted tokens |
+| `GET` | `/` | Public, read-only | Public playlists and ordered tracks from latest eligible successful snapshots; `Cache-Control: no-cache` |
+| `GET` | `/playlist-covers/{playlistId}` | Public, read-only | Current local PNG cover after publication eligibility check; otherwise `404` |
+| `GET` | `/admin/login` | Public | Login form; validated `return_to` supports only read-only admin UI pages |
+| `POST` | `/admin/login` | Public + CSRF | Verify owner password, enforce rate limit and rotate session ID |
+| `POST` | `/admin/logout` | Session + CSRF | Destroy owner session and redirect to `/` |
+| `GET` | `/admin` | Session | Status, recent runs, configured playlists and unresolved matches |
+| `GET` | `/admin/playlists/{playlistId}` | Session | Next synchronization target, examined skipped candidates and playlist metadata |
+| `GET` | `/admin/playlists/{playlistId}/cover` | Session | Configured PNG cover; `404` when unavailable |
+| `GET` | `/admin/ignored-songs` | Session | Active ignored songs; query `history=1` includes closed periods |
+| `POST` | `/admin/ignored-songs` | Session + CSRF | Create playlist or global ignore rule |
+| `POST` | `/admin/ignored-songs/{ruleId}/reactivate` | Session + CSRF | Close one active ignore-rule period |
+| `POST` | `/admin/actions/import` | Session + CSRF | Synchronous date-range import |
+| `POST` | `/admin/actions/sync` | Session + CSRF | Synchronize all configured playlist targets |
+| `GET` | `/admin/spotify/tracks/search` | Session | Validated 10-result CH-market search page |
+| `POST` | `/admin/matches/{songId}` | Session + CSRF | Select or reset one Spotify match |
+| `GET` | `/admin/spotify/authorize` | Session | Redirect to Spotify Authorization Code Flow |
+| `GET` | `/admin/spotify/callback` | Session + OAuth state | Exchange code and store encrypted tokens |
 | `POST` | `/internal/cron/import` | Bearer token | Import previous complete Europe/Zurich day |
 | `POST` | `/internal/cron/sync` | Bearer token | Synchronize all configured playlist rankings |
 | `POST` | `/internal/maintenance/migrate` | Bearer token | Apply pending idempotent database migrations after FTP deployment |
 | `GET` | `/health` | Public | `200` with status and non-reversible diagnostics for the loaded admin password hash; never returns the full hash |
 
-Spotify search errors use `application/problem+json`. Rate limiting returns `429` with Spotify's `Retry-After`; expired owner sessions return `401`, and missing Spotify authorization returns `409`.
+Old browser paths return `404` without redirects. Spotify search errors use `application/problem+json`; expired JSON sessions return `401`, missing Spotify authorization returns `409`, and public load failures return generic HTML `503` with a correlation ID.
 
 The password-hash diagnostics contain the configuration source, length, algorithm, prefix, suffix and SHA-256 fingerprint. A valid bcrypt value has length `60`, algorithm `bcrypt` and prefix `$2y$10$`.
 

@@ -27,21 +27,21 @@ final readonly class WebApplication
     public function handle(Request $request): Response
     {
         try {
-            return $this->route($request);
+            $response = $this->route($request);
         } catch (CsrfViolation $exception) {
-            return $this->error($request, 403, 'CSRF_INVALID', $exception->getMessage());
+            $response = $this->error($request, 403, 'CSRF_INVALID', $exception->getMessage());
         } catch (InvalidArgumentException $exception) {
-            return $this->error($request, 422, 'VALIDATION_FAILED', $exception->getMessage());
+            $response = $this->error($request, 422, 'VALIDATION_FAILED', $exception->getMessage());
         } catch (ImportLocked $exception) {
-            return $this->error($request, 409, 'OPERATION_LOCKED', $exception->getMessage());
+            $response = $this->error($request, 409, 'OPERATION_LOCKED', $exception->getMessage());
         } catch (SpotifyNotAuthorized $exception) {
             if (str_starts_with($request->path, '/internal/') || $this->isJsonRoute($request)) {
-                return $this->error($request, 409, 'SPOTIFY_NOT_AUTHORIZED', $exception->getMessage());
+                $response = $this->error($request, 409, 'SPOTIFY_NOT_AUTHORIZED', $exception->getMessage());
+            } else {
+                $response = Response::redirect('/admin/spotify/authorize');
             }
-
-            return Response::redirect('/spotify/authorize');
         } catch (SpotifyRateLimited $exception) {
-            return $this->error(
+            $response = $this->error(
                 $request,
                 $this->isJsonRoute($request) ? 429 : 503,
                 'SPOTIFY_RATE_LIMITED',
@@ -59,19 +59,30 @@ final readonly class WebApplication
                 $exception->getMessage(),
             ));
 
-            return $this->error(
-                $request,
-                500,
-                'OPERATION_FAILED',
-                'Aktion konnte nicht abgeschlossen werden.',
-                technicalDetails: [
+            if ($this->isPublicRoute($request)) {
+                $response = Response::html($this->renderer->render('public-error', [
                     'error_id' => $errorId,
-                    'request' => $request->method . ' ' . $request->path,
-                    'exception' => $exception::class,
-                    'message' => $exception->getMessage(),
-                ],
-            );
+                ]), 503, [
+                    'Cache-Control' => 'no-store',
+                    'Retry-After' => '60',
+                ]);
+            } else {
+                $response = $this->error(
+                    $request,
+                    500,
+                    'OPERATION_FAILED',
+                    'Aktion konnte nicht abgeschlossen werden.',
+                    technicalDetails: [
+                        'error_id' => $errorId,
+                        'request' => $request->method . ' ' . $request->path,
+                        'exception' => $exception::class,
+                        'message' => $exception->getMessage(),
+                    ],
+                );
+            }
         }
+
+        return $this->applyResponsePolicy($request, $response);
     }
 
     private function route(Request $request): Response
@@ -82,46 +93,86 @@ final readonly class WebApplication
         if (str_starts_with($request->path, '/internal/')) {
             return $this->internal($request);
         }
-        if ($request->method === 'GET' && $request->path === '/login') {
-            return $this->authentication->authenticated()
-                ? Response::redirect('/')
-                : Response::html($this->renderer->render('login', ['csrf' => $this->csrf->token()]));
+        if ($request->method === 'GET' && $request->path === '/') {
+            return Response::html(
+                $this->renderer->render('public-home', $this->operations->publicHomepage()),
+                headers: ['Cache-Control' => 'no-cache'],
+            );
         }
-        if ($request->method === 'POST' && $request->path === '/login') {
+        if ($request->method === 'GET'
+            && preg_match('~^/playlist-covers/([1-9]\d*)$~D', $request->path, $matches) === 1
+        ) {
+            $cover = $this->operations->publicPlaylistCover((int) $matches[1]);
+            if ($cover === null) {
+                return $this->error($request, 404, 'NOT_FOUND', 'Seite nicht gefunden.');
+            }
+
+            return new Response(200, $cover, [
+                'Content-Type' => 'image/png',
+                'Cache-Control' => 'public, max-age=86400',
+            ]);
+        }
+        if ($request->method === 'GET' && $request->path === '/admin/login') {
+            $returnTo = $this->safeLoginReturnTo($request->query['return_to'] ?? null);
+
+            return $this->authentication->authenticated()
+                ? Response::redirect('/admin')
+                : Response::html($this->renderer->render('login', [
+                    'csrf' => $this->csrf->token(),
+                    'return_to' => $returnTo,
+                ]));
+        }
+        if ($request->method === 'POST' && $request->path === '/admin/login') {
             if (!$this->csrf->valid($request->form['_csrf'] ?? null)) {
                 return $this->problem(403, 'CSRF_INVALID', 'Ungültige Formularsitzung.');
             }
-            if (!$this->authentication->login($request->form['password'] ?? '')) {
+            try {
+                $authenticated = $this->authentication->login(
+                    $request->form['password'] ?? '',
+                    $request->clientAddress,
+                );
+            } catch (LoginRateLimited $exception) {
+                return Response::html($this->renderer->render('login', [
+                    'csrf' => $this->csrf->token(),
+                    'error' => 'Zu viele Anmeldeversuche. Bitte später erneut versuchen.',
+                    'return_to' => $this->safeLoginReturnTo($request->form['return_to'] ?? null),
+                ]), 429, ['Retry-After' => (string) $exception->retryAfterSeconds]);
+            }
+            if (!$authenticated) {
                 return Response::html($this->renderer->render('login', [
                     'csrf' => $this->csrf->rotate(),
                     'error' => 'Passwort nicht korrekt.',
+                    'return_to' => $this->safeLoginReturnTo($request->form['return_to'] ?? null),
                 ]), 401);
             }
             $this->csrf->rotate();
 
-            return Response::redirect('/');
+            return Response::redirect($this->safeLoginReturnTo($request->form['return_to'] ?? null));
+        }
+        if ($request->path !== '/admin' && !str_starts_with($request->path, '/admin/')) {
+            return $this->error($request, 404, 'NOT_FOUND', 'Seite nicht gefunden.');
         }
         if (!$this->authentication->authenticated()) {
             return $this->isJsonRoute($request)
                 ? $this->problem(401, 'UNAUTHORIZED', 'Authentication is required.')
-                : Response::redirect('/login', 302);
+                : Response::redirect($this->loginLocation($request), 302);
         }
-        if ($request->method === 'GET' && $request->path === '/spotify/tracks/search') {
+        if ($request->method === 'GET' && $request->path === '/admin/spotify/tracks/search') {
             return Response::json($this->operations->searchSpotifyTracks(
                 $request->query['title'] ?? '',
                 $request->query['artist'] ?? '',
                 $request->query['offset'] ?? '0',
             ));
         }
-        if ($request->method === 'POST' && $request->path === '/logout') {
+        if ($request->method === 'POST' && $request->path === '/admin/logout') {
             if (!$this->csrf->valid($request->form['_csrf'] ?? null)) {
                 return $this->problem(403, 'CSRF_INVALID', 'Ungültige Formularsitzung.');
             }
             $this->authentication->logout();
 
-            return Response::redirect('/login');
+            return Response::redirect('/');
         }
-        if ($request->method === 'GET' && $request->path === '/') {
+        if ($request->method === 'GET' && $request->path === '/admin') {
             $data = $this->operations->dashboard();
             $data['csrf'] = $this->csrf->token();
             $data += $this->consumeFlash();
@@ -131,14 +182,16 @@ final readonly class WebApplication
 
             return Response::html($this->renderer->render('dashboard', $data));
         }
-        if ($request->method === 'GET' && $request->path === '/ignored-songs') {
+        if ($request->method === 'GET' && $request->path === '/admin/ignored-songs') {
             $data = $this->operations->ignoredSongs(($request->query['history'] ?? '') === '1');
             $data['csrf'] = $this->csrf->token();
             $data += $this->consumeFlash();
 
             return Response::html($this->renderer->render('ignored-songs', $data));
         }
-        if ($request->method === 'GET' && preg_match('~^/playlists/(\d+)/cover$~', $request->path, $matches) === 1) {
+        if ($request->method === 'GET'
+            && preg_match('~^/admin/playlists/(\d+)/cover$~', $request->path, $matches) === 1
+        ) {
             $cover = $this->operations->playlistCover((int) $matches[1]);
             if ($cover === null) {
                 return $this->error($request, 404, 'NOT_FOUND', 'Seite nicht gefunden.');
@@ -149,7 +202,9 @@ final readonly class WebApplication
                 'Cache-Control' => 'private, max-age=86400',
             ]);
         }
-        if ($request->method === 'GET' && preg_match('~^/playlists/(\d+)$~', $request->path, $matches) === 1) {
+        if ($request->method === 'GET'
+            && preg_match('~^/admin/playlists/(\d+)$~', $request->path, $matches) === 1
+        ) {
             $data = $this->operations->playlist((int) $matches[1]);
             if ($data === null) {
                 return $this->error($request, 404, 'NOT_FOUND', 'Seite nicht gefunden.');
@@ -159,10 +214,10 @@ final readonly class WebApplication
 
             return Response::html($this->renderer->render('playlist', $data));
         }
-        if ($request->method === 'GET' && str_starts_with($request->path, '/playlists/')) {
+        if ($request->method === 'GET' && str_starts_with($request->path, '/admin/playlists/')) {
             return $this->error($request, 404, 'NOT_FOUND', 'Seite nicht gefunden.');
         }
-        if ($request->method === 'POST' && $request->path === '/actions/import') {
+        if ($request->method === 'POST' && $request->path === '/admin/actions/import') {
             $this->requireCsrf($request);
             $result = $this->operations->import(
                 $request->form['from_date'] ?? '',
@@ -175,9 +230,9 @@ final readonly class WebApplication
                 (int) ($result['counts']['duplicates'] ?? 0),
             ));
 
-            return Response::redirect('/');
+            return Response::redirect('/admin');
         }
-        if ($request->method === 'POST' && $request->path === '/actions/sync') {
+        if ($request->method === 'POST' && $request->path === '/admin/actions/sync') {
             $this->requireCsrf($request);
             $result = $this->operations->synchronize('manual');
             if (($result['has_warnings'] ?? false) === true) {
@@ -197,9 +252,9 @@ final readonly class WebApplication
                 ));
             }
 
-            return Response::redirect('/');
+            return Response::redirect('/admin');
         }
-        if ($request->method === 'POST' && $request->path === '/ignored-songs') {
+        if ($request->method === 'POST' && $request->path === '/admin/ignored-songs') {
             $this->requireCsrf($request);
             $scope = $request->form['scope'] ?? '';
             if (!\in_array($scope, ['playlist', 'global'], true)) {
@@ -221,20 +276,28 @@ final readonly class WebApplication
             }
             $sourcePlaylistId = (int) ($request->form['source_playlist_id'] ?? 0);
 
-            return Response::redirect($sourcePlaylistId > 0 ? '/playlists/' . $sourcePlaylistId : '/ignored-songs');
+            return Response::redirect(
+                $sourcePlaylistId > 0
+                    ? '/admin/playlists/' . $sourcePlaylistId
+                    : '/admin/ignored-songs',
+            );
         }
         if ($request->method === 'POST'
-            && preg_match('~^/ignored-songs/(\d+)/reactivate$~', $request->path, $matches) === 1
+            && preg_match('~^/admin/ignored-songs/(\d+)/reactivate$~', $request->path, $matches) === 1
         ) {
             $this->requireCsrf($request);
             $this->operations->reactivateSong((int) $matches[1]);
             $this->flash('Song reaktiviert. Die nächste Playlist-Auswahl berücksichtigt ihn wieder regulär.');
 
             return Response::redirect(
-                ($request->form['return_history'] ?? '') === '1' ? '/ignored-songs?history=1' : '/ignored-songs',
+                ($request->form['return_history'] ?? '') === '1'
+                    ? '/admin/ignored-songs?history=1'
+                    : '/admin/ignored-songs',
             );
         }
-        if ($request->method === 'POST' && preg_match('~^/matches/(\d+)$~', $request->path, $matches) === 1) {
+        if ($request->method === 'POST'
+            && preg_match('~^/admin/matches/(\d+)$~', $request->path, $matches) === 1
+        ) {
             $this->requireCsrf($request);
             $songId = (int) $matches[1];
             $action = $request->form['action'] ?? 'select';
@@ -250,12 +313,12 @@ final readonly class WebApplication
 
             return Response::redirect($this->safeReturnTo($request->form['return_to'] ?? null));
         }
-        if ($request->method === 'GET' && $request->path === '/spotify/authorize') {
+        if ($request->method === 'GET' && $request->path === '/admin/spotify/authorize') {
             $redirectUri = $this->callbackUri();
 
             return Response::redirect($this->operations->authorizationUrl($this->oauthState->issue(), $redirectUri), 302);
         }
-        if ($request->method === 'GET' && $request->path === '/spotify/callback') {
+        if ($request->method === 'GET' && $request->path === '/admin/spotify/callback') {
             if (!$this->oauthState->consume($request->query['state'] ?? null)) {
                 return $this->problem(403, 'OAUTH_STATE_INVALID', 'Spotify-Anmeldung konnte nicht validiert werden.');
             }
@@ -265,7 +328,7 @@ final readonly class WebApplication
             $this->operations->exchangeAuthorizationCode($request->query['code'] ?? '', $this->callbackUri());
             $this->flash('Spotify-Konto verbunden.');
 
-            return Response::redirect('/');
+            return Response::redirect('/admin');
         }
 
         return $this->problem(404, 'NOT_FOUND', 'Seite nicht gefunden.');
@@ -348,21 +411,74 @@ final readonly class WebApplication
 
     private function isJsonRoute(Request $request): bool
     {
-        return $request->path === '/spotify/tracks/search';
+        return $request->path === '/admin/spotify/tracks/search';
     }
 
     private function safeReturnTo(?string $returnTo): string
     {
-        if ($returnTo === '/' || (\is_string($returnTo) && preg_match('~^/playlists/[1-9]\d*$~D', $returnTo) === 1)) {
+        if ($returnTo === '/admin'
+            || (\is_string($returnTo) && preg_match('~^/admin/playlists/[1-9]\d*$~D', $returnTo) === 1)
+        ) {
             return $returnTo;
         }
 
-        return '/';
+        return '/admin';
+    }
+
+    private function safeLoginReturnTo(?string $returnTo): string
+    {
+        if (!\is_string($returnTo)) {
+            return '/admin';
+        }
+        if ($returnTo === '/admin'
+            || preg_match('~^/admin/playlists/[1-9]\d*$~D', $returnTo) === 1
+            || preg_match('~^/admin/ignored-songs(?:\?history=1)?$~D', $returnTo) === 1
+        ) {
+            return $returnTo;
+        }
+
+        return '/admin';
+    }
+
+    private function loginLocation(Request $request): string
+    {
+        $returnTo = null;
+        if ($request->method === 'GET'
+            && preg_match('~^/admin/playlists/[1-9]\d*$~D', $request->path) === 1
+        ) {
+            $returnTo = $request->path;
+        } elseif ($request->method === 'GET' && $request->path === '/admin/ignored-songs') {
+            $returnTo = $request->path
+                . (($request->query['history'] ?? '') === '1' ? '?history=1' : '');
+        }
+
+        return $returnTo === null
+            ? '/admin/login'
+            : '/admin/login?return_to=' . rawurlencode($returnTo);
+    }
+
+    private function isPublicRoute(Request $request): bool
+    {
+        return $request->path === '/'
+            || str_starts_with($request->path, '/playlist-covers/');
+    }
+
+    private function applyResponsePolicy(Request $request, Response $response): Response
+    {
+        if ($request->path === '/') {
+            return $response;
+        }
+
+        return new Response(
+            $response->status,
+            $response->body,
+            array_merge($response->headers, ['X-Robots-Tag' => 'noindex, nofollow']),
+        );
     }
 
     private function callbackUri(): string
     {
-        return rtrim($this->applicationUrl, '/') . '/spotify/callback';
+        return rtrim($this->applicationUrl, '/') . '/admin/spotify/callback';
     }
 
     private function flash(string $message, string $type = 'success'): void

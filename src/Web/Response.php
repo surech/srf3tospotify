@@ -25,9 +25,14 @@ final readonly class Response
         );
     }
 
-    public static function html(string $body, int $status = 200): self
+    /** @param array<string, string> $headers */
+    public static function html(string $body, int $status = 200, array $headers = []): self
     {
-        return new self($status, $body, ['Content-Type' => 'text/html; charset=utf-8']);
+        return new self(
+            $status,
+            $body,
+            array_merge(['Content-Type' => 'text/html; charset=utf-8'], $headers),
+        );
     }
 
     public static function redirect(string $location, int $status = 303): self

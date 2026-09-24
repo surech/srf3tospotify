@@ -42,8 +42,8 @@ final class FakeSpotifyGateway implements SpotifyGateway
     /** @var list<bool> */
     public array $createdPlaylistPublicStates = [];
 
-    /** @var list<array{playlist_id: string, public: bool}> */
-    public array $visibilityUpdates = [];
+    /** @var list<array{playlistId: string, name: string, description: string, public: bool}> */
+    public array $playlistUpdates = [];
 
     /** @var list<array{playlist_id: string, jpeg: string}> */
     public array $coverUploads = [];
@@ -81,9 +81,13 @@ final class FakeSpotifyGateway implements SpotifyGateway
         return $this->playlistExistence[$playlistId] ?? true;
     }
 
-    public function updatePlaylistVisibility(string $playlistId, bool $public): void
-    {
-        $this->visibilityUpdates[] = ['playlist_id' => $playlistId, 'public' => $public];
+    public function updatePlaylistDetails(
+        string $playlistId,
+        string $name,
+        string $description,
+        bool $public,
+    ): void {
+        $this->playlistUpdates[] = compact('playlistId', 'name', 'description', 'public');
     }
 
     public function uploadPlaylistCoverImage(string $playlistId, string $jpeg): void

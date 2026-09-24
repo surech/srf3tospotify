@@ -16,11 +16,12 @@ $includeHistory = ($include_history ?? false) === true;
 <body>
   <header class="topbar">
     <div class="page-width topbar-inner">
-      <a href="/" class="brand-mark">SRF<span>3</span> · Spotify</a>
+      <a href="/admin" class="brand-mark">SRF<span>3</span> · Spotify</a>
       <nav class="top-actions" aria-label="Kontoverwaltung">
-        <a class="button button-secondary" href="/ignored-songs" aria-current="page">Ignorierte Songs</a>
-        <a class="button button-secondary" href="/spotify/authorize">Spotify verbinden</a>
-        <form method="post" action="/logout">
+        <a class="button button-secondary" href="/">Öffentliche Seite</a>
+        <a class="button button-secondary" href="/admin/ignored-songs" aria-current="page">Ignorierte Songs</a>
+        <a class="button button-secondary" href="/admin/spotify/authorize">Spotify verbinden</a>
+        <form method="post" action="/admin/logout">
           <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
           <button type="submit" class="button button-quiet">Abmelden</button>
         </form>
@@ -32,7 +33,7 @@ $includeHistory = ($include_history ?? false) === true;
     <section class="summary-band">
       <div class="page-width section-heading summary-heading">
         <div>
-          <a class="back-link" href="/">Zur Übersicht</a>
+          <a class="back-link" href="/admin">Zur Übersicht</a>
           <p class="eyebrow">Playlist-Regeln</p>
           <h1>Ignorierte Songs</h1>
         </div>
@@ -47,7 +48,7 @@ $includeHistory = ($include_history ?? false) === true;
 
       <div class="ignored-toolbar">
         <p class="count-label">Sortierung: zuletzt ignoriert</p>
-        <form method="get" action="/ignored-songs">
+        <form method="get" action="/admin/ignored-songs">
           <label class="toggle-control">
             <input type="checkbox" name="history" value="1" data-auto-submit<?= $includeHistory ? ' checked' : '' ?>>
             Historie anzeigen
@@ -94,7 +95,7 @@ $includeHistory = ($include_history ?? false) === true;
                     <p class="ignore-reason"><?= $escape($rule['reason'] ?? 'Kein Grund angegeben') ?></p>
                   </div>
                   <?php if ($isActive): ?>
-                    <form method="post" action="/ignored-songs/<?= $escape($rule['id'] ?? '') ?>/reactivate"<?= $confirmation === null ? '' : ' data-confirm="' . $escape($confirmation) . '"' ?>>
+                    <form method="post" action="/admin/ignored-songs/<?= $escape($rule['id'] ?? '') ?>/reactivate"<?= $confirmation === null ? '' : ' data-confirm="' . $escape($confirmation) . '"' ?>>
                       <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
                       <?php if ($includeHistory): ?><input type="hidden" name="return_history" value="1"><?php endif; ?>
                       <button type="submit" class="button button-quiet">Reaktivieren</button>
@@ -111,7 +112,7 @@ $includeHistory = ($include_history ?? false) === true;
                 <div><p class="eyebrow">Alle Playlists</p><h3 id="<?= $escape($globalDialogId) ?>-title">Song global ignorieren</h3></div>
                 <button type="button" class="dialog-close" data-dialog-close aria-label="Schliessen" title="Schliessen">&times;</button>
               </div>
-              <form method="post" action="/ignored-songs" class="ignore-song-form">
+              <form method="post" action="/admin/ignored-songs" class="ignore-song-form">
                 <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
                 <input type="hidden" name="song_id" value="<?= $escape($song['song_id'] ?? '') ?>">
                 <input type="hidden" name="scope" value="global">

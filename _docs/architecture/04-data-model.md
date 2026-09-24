@@ -14,6 +14,7 @@
 | `sync_run` | Auditable desired playlist snapshot and result | Running, succeeded, failed |
 | `sync_run_item` | Ordered desired track list for a synchronization | Immutable with its run |
 | `song_ignore_rule` | Historized global or playlist-specific exclusion period for one logical song | Active until manually reactivated; then immutable history |
+| `login_attempt` | HMAC-keyed failed admin-login window | Cleared by successful login or reset after 15 minutes |
 
 ## Keys and Constraints
 
@@ -23,6 +24,8 @@
 - `spotify_match.song_id`: unique, ensuring one current mapping per logical song.
 - A manual `review` match has no Spotify track fields and blocks later automatic acceptance until the owner selects a track.
 - `sync_run_item`: unique by `(sync_run_id, spotify_track_id)` to prevent duplicate playlist items.
+- Successful `sync_run` rows snapshot published name, description, Spotify playlist ID and visibility; items snapshot Spotify title and artist.
+- `login_attempt.client_key`: HMAC-SHA-256 of `REMOTE_ADDR` with `APP_KEY`; raw client addresses are never stored.
 - `song_ignore_rule`: at most one active period per `(song_id, global-or-playlist scope)`; inactive periods remain retained.
 - A null `song_ignore_rule.playlist_id` denotes a global rule that also applies to future playlists.
 - Foreign keys use InnoDB and reject orphaned operational data.
@@ -120,6 +123,10 @@ erDiagram
         datetime window_from_utc
         datetime window_to_utc
         string spotify_snapshot_id
+        string published_name
+        string published_description
+        string published_spotify_playlist_id
+        boolean published_public
         integer requested_count
         integer track_count
         integer ignored_count
@@ -133,6 +140,8 @@ erDiagram
         bigint song_id FK
         bigint spotify_match_id FK
         string spotify_track_id
+        string spotify_title
+        string spotify_artist
         integer play_count
     }
     SONG_IGNORE_RULE {
@@ -142,6 +151,12 @@ erDiagram
         string reason nullable
         datetime ignored_at
         datetime reactivated_at nullable
+    }
+    LOGIN_ATTEMPT {
+        string client_key PK
+        integer failure_count
+        datetime window_started_at
+        datetime updated_at
     }
 ```
 
@@ -156,6 +171,8 @@ erDiagram
 - Ignore reasons are optional and limited to 500 characters. Reactivation timestamps close a rule period; rows are never reopened or overwritten.
 - Effective exclusions resolve the ignored song's current accepted Spotify track ID at target-calculation time, preventing aliases of the same concrete track while allowing distinct live or remix track IDs.
 - Synchronization diagnostics persist requested and actual counts plus ignored, missing-match and duplicate-track causes for each playlist run.
+- Public pages select only currently public playlists whose latest successful run published the same Spotify ID, public visibility and at least one item.
+- Name, description, ordered track IDs, Spotify titles and artists are published atomically with a successful sync; covers remain current local assets.
 - OAuth token ciphertext uses authenticated encryption; the encryption key comes from an environment variable and is never stored in MariaDB.
 - Raw upstream JSON is not retained by default; sanitized fixture samples belong only in tests.
-- Cleanup removes completed run metadata after 90 days. `play.import_run_id` becomes null through `ON DELETE SET NULL`; broadcast history remains intact.
+- Cleanup removes completed run metadata after 90 days while retaining each playlist's latest successful run and items. `play.import_run_id` becomes null through `ON DELETE SET NULL`; broadcast history remains intact.

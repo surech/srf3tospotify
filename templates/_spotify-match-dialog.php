@@ -65,7 +65,7 @@ $formatDuration = static function (int $durationMs): string {
     <div class="spotify-results" data-spotify-results role="radiogroup" aria-label="Spotify-Suchergebnisse"></div>
     <button type="button" class="button button-secondary load-more-button" data-spotify-load-more hidden>Mehr laden</button>
 
-    <form method="post" action="/matches/<?= $escape($songId) ?>" class="selection-form" data-spotify-selection-form>
+    <form method="post" action="/admin/matches/<?= $escape($songId) ?>" class="selection-form" data-spotify-selection-form>
       <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
       <input type="hidden" name="return_to" value="<?= $escape($returnTo) ?>">
       <input type="hidden" name="track" value="" data-selected-track>
@@ -74,7 +74,7 @@ $formatDuration = static function (int $durationMs): string {
 
     <details class="manual-track-fallback">
       <summary>Spotify-URL oder Track-ID verwenden</summary>
-      <form method="post" action="/matches/<?= $escape($songId) ?>" class="manual-track-form">
+      <form method="post" action="/admin/matches/<?= $escape($songId) ?>" class="manual-track-form">
         <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
         <input type="hidden" name="return_to" value="<?= $escape($returnTo) ?>">
         <label for="manual-track-<?= $escape($songId) ?>">Spotify-URL oder Track-ID</label>
@@ -93,7 +93,7 @@ $formatDuration = static function (int $durationMs): string {
           <p>Der Song bleibt für die manuelle Prüfung offen und wird nicht automatisch neu zugeordnet.</p>
           <div class="dialog-actions">
             <button type="button" class="button button-secondary" data-confirm-cancel>Abbrechen</button>
-            <form method="post" action="/matches/<?= $escape($songId) ?>">
+            <form method="post" action="/admin/matches/<?= $escape($songId) ?>">
               <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
               <input type="hidden" name="return_to" value="<?= $escape($returnTo) ?>">
               <input type="hidden" name="action" value="reset">
@@ -106,7 +106,7 @@ $formatDuration = static function (int $durationMs): string {
 
     <section class="dialog-action-section ignore-match-section">
       <h4>Song global ignorieren</h4>
-      <form method="post" action="/ignored-songs" data-global-ignore-form>
+      <form method="post" action="/admin/ignored-songs" data-global-ignore-form>
         <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
         <input type="hidden" name="song_id" value="<?= $escape($songId) ?>">
         <input type="hidden" name="scope" value="global">

@@ -14,8 +14,9 @@
       <?php if (isset($error) && is_string($error)): ?>
         <p class="notice notice-error" role="alert"><?= $escape($error) ?></p>
       <?php endif; ?>
-      <form method="post" action="/login" class="stack-form">
+      <form method="post" action="/admin/login" class="stack-form">
         <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
+        <input type="hidden" name="return_to" value="<?= $escape($return_to ?? '/admin') ?>">
         <label for="password">Passwort</label>
         <input id="password" name="password" type="password" autocomplete="current-password" required autofocus>
         <button type="submit" class="button button-primary">Anmelden</button>

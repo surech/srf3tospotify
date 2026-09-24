@@ -4,6 +4,7 @@
 
 ```mermaid
 flowchart LR
+    Visitor[Public visitor] -->|HTTPS: inspect playlists and open Spotify links| App[SRF3ToSpotify]
     Owner[Owner] -->|HTTPS: configure, inspect, trigger, review| App[SRF3ToSpotify]
     Scheduler[Hoster scheduler] -->|CLI cron or authenticated HTTPS| App
     App -->|HTTPS GET songList| SRF[SRF Integration Layer]
@@ -14,6 +15,7 @@ flowchart LR
 
 ```mermaid
 flowchart TB
+    Visitor[Public browser] -->|HTTPS, sessionless read| Web[PHP web application]
     Owner[Owner browser] -->|HTTPS| Web[PHP web application]
     Scheduler[Hoster scheduler] -->|PHP CLI preferred| CLI[PHP CLI entry point]
     Scheduler -.->|Bearer-authenticated fallback| Web

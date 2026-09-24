@@ -8,6 +8,7 @@ SRF3ToSpotify imports the play history of one or more SRF radio channels, stores
 
 | Actor | Goal |
 | --- | --- |
+| Public visitor | Open generated playlists on Spotify and inspect their last synchronized songs without an account |
 | Owner | Configure Spotify, run imports/synchronizations, inspect rankings, correct matches |
 | Scheduler | Execute unattended imports and playlist synchronization |
 | SRF Integration Layer | Supply radio play events as JSON |
@@ -23,12 +24,13 @@ SRF3ToSpotify imports the play history of one or more SRF radio channels, stores
 - Rankings by play count for a configurable period.
 - Automatic Spotify matching with confidence and manual correction.
 - Creation or update of all configured managed Spotify playlists.
+- Read-only public homepage for successfully synchronized public playlists.
 - Operational status, run history and structured logs.
 
 ### Excluded
 
 - Audio playback or storage.
-- Public multi-user service.
+- Public accounts, mutations, search, embedded players or analytics.
 - Mobile application.
 - Machine-learning matching.
 - Real-time streaming ingestion.
@@ -46,11 +48,12 @@ SRF3ToSpotify imports the play history of one or more SRF radio channels, stores
 | --- | --- |
 | Import performance | One normal broadcast day, up to 500 events, completes within 30 seconds excluding upstream outage retries |
 | Dashboard performance | Ranking and status pages respond within 1 second at p95 for 500,000 stored plays |
+| Public performance | Homepage uses one local snapshot query and no Spotify API request |
 | Synchronization | Both default playlists complete within 2 minutes when Spotify is not rate-limiting |
 | Reliability | Repeating any import or sync produces no duplicate play or playlist item |
 | Recovery | Failed runs retain previous playlist content and can be retried without manual database repair |
 | Availability | Best effort; one successful daily import within 24 hours is sufficient |
-| Retention | Play history retained until owner deletion; operational logs and run details retained for 90 days |
+| Retention | Play history retained until owner deletion; run details retained for 90 days except each playlist's latest successful publication snapshot |
 | Privacy | No listener data; Spotify tokens encrypted at rest; secrets never logged |
 | Observability | Every run has correlation ID, status, counts, duration and sanitized error details |
 

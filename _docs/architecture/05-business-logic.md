@@ -54,13 +54,24 @@
 - Calculate each playlist target independently from its complete airplay ranking, accepted matches and exclusion snapshot.
 - Persist the ordered desired snapshot before calling Spotify.
 - Create each configured playlist once through `POST /v1/me/playlists` when no playlist ID exists.
+- Update name, description and visibility of every existing managed playlist before replacing its items.
 - Convert each configured PNG cover to JPEG and upload it through `PUT /v1/playlists/{playlist_id}/images` on every synchronization.
 - Replace items through the current `/v1/playlists/{playlist_id}/items` contract. Replace the first batch and append subsequent batches of at most 100.
 - Never modify a playlist not owned by the authorized Spotify account.
-- On failure, retain the desired snapshot and previous successful run metadata for retry and diagnosis.
+- On success, persist the published playlist metadata and Spotify title/artist for every ordered item as one immutable public snapshot.
+- On failure, retain the desired snapshot and previous successful publication metadata for retry and diagnosis.
 - Attempt every configured playlist even if another target fails; report the overall call as failed after all attempts.
 - Repeating synchronization with the same ranking yields the same URI sequence.
 - Fixed-size targets with too few eligible tracks are still published successfully. The run records a warning with requested/actual counts and aggregate ignored, missing-match and duplicate causes.
+
+## Public Homepage
+
+- `GET /` starts no PHP session, sets no cookie and performs read-only database access.
+- Show only currently public playlists with a Spotify ID whose latest successful run also published that ID as public and contains at least one item.
+- Render playlist metadata and all ordered tracks from the latest successful snapshot; never call Spotify while serving the page.
+- Serve a cover only after the same object-level publication check; private, empty and unknown playlist IDs all return `404`.
+- Configuration changes become public only after a successful sync, except switching `is_public` off hides a playlist immediately.
+- A database failure returns a generic `503` page with a correlation ID and no technical details.
 
 ## Import Sequence
 
@@ -127,6 +138,7 @@ sequenceDiagram
 ## Retention
 
 - `cleanup` removes completed import and synchronization runs older than the configured retention period; default 90 days.
+- The newest successful sync per playlist and its items are retained regardless of age as the public publication source.
 - Imported plays remain stored when their originating run metadata expires.
 - Structured log records older than the cutoff are pruned line by line; malformed lines remain for diagnosis.
 - Running or unfinished runs are never removed by retention.

@@ -7,6 +7,11 @@ namespace App\Web;
 interface WebOperations
 {
     /** @return array<string, mixed> */
+    public function publicHomepage(): array;
+
+    public function publicPlaylistCover(int $playlistId): ?string;
+
+    /** @return array<string, mixed> */
     public function dashboard(): array;
 
     /** @return array<string, mixed>|null */

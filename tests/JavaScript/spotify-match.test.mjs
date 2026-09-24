@@ -26,7 +26,7 @@ function response(status, payload, headers = {}) {
 test('builds a trimmed paged search URL and requires one field', () => {
   const url = buildSpotifySearchUrl('https://app.example', ' Artist ', ' Song ', 20);
 
-  assert.equal(url.pathname, '/spotify/tracks/search');
+  assert.equal(url.pathname, '/admin/spotify/tracks/search');
   assert.equal(url.searchParams.get('artist'), 'Artist');
   assert.equal(url.searchParams.get('title'), 'Song');
   assert.equal(url.searchParams.get('offset'), '20');

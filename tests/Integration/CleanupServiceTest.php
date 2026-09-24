@@ -34,6 +34,8 @@ final class CleanupServiceTest extends TestCase
 
     protected function tearDown(): void
     {
+        $syncQuery = $this->connection->prepare('DELETE FROM sync_runs WHERE correlation_id LIKE :prefix');
+        $syncQuery->execute(['prefix' => $this->correlationId . '-s-%']);
         $query = $this->connection->prepare('DELETE FROM import_runs WHERE correlation_id = :correlation_id');
         $query->execute(['correlation_id' => $this->correlationId]);
         @unlink($this->logPath);
@@ -88,6 +90,92 @@ final class CleanupServiceTest extends TestCase
 
         $this->connection->prepare('DELETE FROM plays WHERE id = :id')->execute(['id' => $playId]);
         $this->connection->prepare('DELETE FROM songs WHERE id = :id')->execute(['id' => $songId]);
+    }
+
+    public function testKeepsLatestSuccessfulSyncSnapshotPerPlaylist(): void
+    {
+        $playlistId = $this->scalar('SELECT id FROM playlists ORDER BY id LIMIT 1');
+        $olderSuccessId = $this->createSyncRun($playlistId, 'old', 'succeeded', '2025-01-01');
+        $latestSuccessId = $this->createSyncRun($playlistId, 'new', 'succeeded', '2025-01-02');
+        $failedId = $this->createSyncRun($playlistId, 'failed', 'failed', '2025-01-03');
+        [$songId, $matchId] = $this->createSnapshotItem($latestSuccessId);
+
+        try {
+            $result = (new MaintenanceRepository($this->connection))->deleteFinishedRunsBefore(
+                new DateTimeImmutable('2026-01-01T00:00:00Z'),
+            );
+
+            self::assertSame(2, $result['sync_runs']);
+            self::assertSame(0, $this->runCount($olderSuccessId));
+            self::assertSame(1, $this->runCount($latestSuccessId));
+            self::assertSame(0, $this->runCount($failedId));
+            self::assertSame(1, $this->scalar(
+                'SELECT COUNT(*) FROM sync_run_items WHERE sync_run_id = ' . $latestSuccessId,
+            ));
+        } finally {
+            $this->connection->prepare('DELETE FROM sync_runs WHERE id = :id')->execute(['id' => $latestSuccessId]);
+            $this->connection->prepare('DELETE FROM spotify_matches WHERE id = :id')->execute(['id' => $matchId]);
+            $this->connection->prepare('DELETE FROM songs WHERE id = :id')->execute(['id' => $songId]);
+        }
+    }
+
+    private function createSyncRun(int $playlistId, string $suffix, string $status, string $finishedAt): int
+    {
+        $query = $this->connection->prepare(
+            <<<'SQL'
+                INSERT INTO sync_runs (
+                    playlist_id, correlation_id, trigger_type, status,
+                    window_from_utc, window_to_utc, finished_at
+                ) VALUES (
+                    :playlist_id, :correlation_id, 'manual', :status,
+                    '2024-12-01', '2025-01-01', :finished_at
+                )
+                SQL,
+        );
+        $query->execute([
+            'playlist_id' => $playlistId,
+            'correlation_id' => $this->correlationId . '-s-' . $suffix,
+            'status' => $status,
+            'finished_at' => $finishedAt,
+        ]);
+
+        return (int) $this->connection->lastInsertId();
+    }
+
+    /** @return array{int, int} */
+    private function createSnapshotItem(int $runId): array
+    {
+        $song = $this->connection->prepare(
+            "INSERT INTO songs (identity_hash, artist, title, normalized_artist, normalized_title) "
+            . "VALUES (:hash, 'Retained Artist', 'Retained Song', 'retained artist', 'retained song')",
+        );
+        $song->execute(['hash' => random_bytes(32)]);
+        $songId = (int) $this->connection->lastInsertId();
+        $match = $this->connection->prepare(
+            "INSERT INTO spotify_matches (song_id, spotify_track_id, spotify_uri, match_source, status) "
+            . "VALUES (:song_id, 'retained-track', 'spotify:track:retained-track', 'manual', 'accepted')",
+        );
+        $match->execute(['song_id' => $songId]);
+        $matchId = (int) $this->connection->lastInsertId();
+        $item = $this->connection->prepare(
+            <<<'SQL'
+                INSERT INTO sync_run_items (
+                    sync_run_id, position, song_id, spotify_match_id, spotify_track_id,
+                    spotify_title, spotify_artist, play_count
+                ) VALUES (
+                    :sync_run_id, 0, :song_id, :spotify_match_id, 'retained-track',
+                    'Retained Song', 'Retained Artist', 1
+                )
+                SQL,
+        );
+        $item->execute(['sync_run_id' => $runId, 'song_id' => $songId, 'spotify_match_id' => $matchId]);
+
+        return [$songId, $matchId];
+    }
+
+    private function runCount(int $runId): int
+    {
+        return $this->scalar('SELECT COUNT(*) FROM sync_runs WHERE id = ' . $runId);
     }
 
     private function scalar(string $sql): int

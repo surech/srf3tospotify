@@ -17,11 +17,12 @@ $recentSyncs = is_array($recent_syncs ?? null) ? $recent_syncs : [];
 <body>
   <header class="topbar">
     <div class="page-width topbar-inner">
-      <a href="/" class="brand-mark">SRF<span>3</span> · Spotify</a>
+      <a href="/admin" class="brand-mark">SRF<span>3</span> · Spotify</a>
       <nav class="top-actions" aria-label="Kontoverwaltung">
-        <a class="button button-secondary" href="/ignored-songs">Ignorierte Songs</a>
-        <a class="button button-secondary" href="/spotify/authorize">Spotify verbinden</a>
-        <form method="post" action="/logout">
+        <a class="button button-secondary" href="/">Öffentliche Seite</a>
+        <a class="button button-secondary" href="/admin/ignored-songs">Ignorierte Songs</a>
+        <a class="button button-secondary" href="/admin/spotify/authorize">Spotify verbinden</a>
+        <form method="post" action="/admin/logout">
           <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
           <button type="submit" class="button button-quiet">Abmelden</button>
         </form>
@@ -58,7 +59,7 @@ $recentSyncs = is_array($recent_syncs ?? null) ? $recent_syncs : [];
           <div><p class="eyebrow">Steuerung</p><h2 id="actions-title">Aktualisieren</h2></div>
         </div>
         <div class="command-grid">
-          <form method="post" action="/actions/import" class="inline-form">
+          <form method="post" action="/admin/actions/import" class="inline-form">
             <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
             <label for="from-date">Von</label>
             <input id="from-date" name="from_date" type="date" value="<?= $escape($yesterday ?? '') ?>" required>
@@ -66,7 +67,7 @@ $recentSyncs = is_array($recent_syncs ?? null) ? $recent_syncs : [];
             <input id="to-date" name="to_date" type="date" value="<?= $escape($yesterday ?? '') ?>" required>
             <button type="submit" class="button button-primary">Importieren</button>
           </form>
-          <form method="post" action="/actions/sync" class="sync-form">
+          <form method="post" action="/admin/actions/sync" class="sync-form">
             <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
             <button type="submit" class="button button-spotify">Spotify synchronisieren</button>
           </form>
@@ -80,7 +81,7 @@ $recentSyncs = is_array($recent_syncs ?? null) ? $recent_syncs : [];
         </div>
         <div class="playlist-list">
           <?php foreach ($playlists as $playlist): ?>
-            <?php $playlistUrl = '/playlists/' . (int) ($playlist['id'] ?? 0); ?>
+            <?php $playlistUrl = '/admin/playlists/' . (int) ($playlist['id'] ?? 0); ?>
             <article class="playlist-row">
               <a class="playlist-cover-link" href="<?= $escape($playlistUrl) ?>" aria-label="<?= $escape(($playlist['name'] ?? 'Playlist') . ' anzeigen') ?>">
                 <?php if (is_string($playlist['cover_url'] ?? null)): ?>
@@ -124,7 +125,7 @@ $recentSyncs = is_array($recent_syncs ?? null) ? $recent_syncs : [];
         <?php if ($unresolvedMatches === []): ?><p class="empty-state">Keine offenen Zuordnungen.</p><?php endif; ?>
         </div>
         <?php foreach ($unresolvedMatches as $entry): ?>
-          <?php $returnTo = '/'; require __DIR__ . '/_spotify-match-dialog.php'; ?>
+          <?php $returnTo = '/admin'; require __DIR__ . '/_spotify-match-dialog.php'; ?>
         <?php endforeach; ?>
       </section>
 

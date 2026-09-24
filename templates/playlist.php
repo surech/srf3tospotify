@@ -21,11 +21,12 @@ $skipReasonLabels = [
 <body>
   <header class="topbar">
     <div class="page-width topbar-inner">
-      <a href="/" class="brand-mark">SRF<span>3</span> · Spotify</a>
+      <a href="/admin" class="brand-mark">SRF<span>3</span> · Spotify</a>
       <nav class="top-actions" aria-label="Kontoverwaltung">
-        <a class="button button-secondary" href="/ignored-songs">Ignorierte Songs</a>
-        <a class="button button-secondary" href="/spotify/authorize">Spotify verbinden</a>
-        <form method="post" action="/logout">
+        <a class="button button-secondary" href="/">Öffentliche Seite</a>
+        <a class="button button-secondary" href="/admin/ignored-songs">Ignorierte Songs</a>
+        <a class="button button-secondary" href="/admin/spotify/authorize">Spotify verbinden</a>
+        <form method="post" action="/admin/logout">
           <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
           <button type="submit" class="button button-quiet">Abmelden</button>
         </form>
@@ -42,7 +43,7 @@ $skipReasonLabels = [
           <span class="playlist-cover playlist-cover-placeholder playlist-detail-cover" aria-hidden="true">SRF<span>3</span></span>
         <?php endif; ?>
         <div class="playlist-detail-copy">
-          <a class="back-link" href="/">Zur Übersicht</a>
+          <a class="back-link" href="/admin">Zur Übersicht</a>
           <p class="eyebrow">Playlist</p>
           <h1><?= $escape($playlist['name'] ?? '') ?></h1>
           <p class="playlist-description"><?= $escape($playlist['description'] ?? '') ?></p>
@@ -172,7 +173,7 @@ $skipReasonLabels = [
             <?php endif; ?>
           </dialog>
 
-          <?php $returnTo = '/playlists/' . (int) ($playlist['id'] ?? 0); require __DIR__ . '/_spotify-match-dialog.php'; ?>
+          <?php $returnTo = '/admin/playlists/' . (int) ($playlist['id'] ?? 0); require __DIR__ . '/_spotify-match-dialog.php'; ?>
 
           <?php $ignoreDialogId = 'ignore-song-' . (int) ($entry['song_id'] ?? $index); ?>
           <dialog class="app-dialog ignore-song-dialog" id="<?= $escape($ignoreDialogId) ?>" aria-labelledby="<?= $escape($ignoreDialogId) ?>-title">
@@ -180,7 +181,7 @@ $skipReasonLabels = [
               <div><p class="eyebrow">Playlist-Regel</p><h3 id="<?= $escape($ignoreDialogId) ?>-title">Song ignorieren</h3></div>
               <button type="button" class="dialog-close" data-dialog-close aria-label="Schliessen" title="Schliessen">&times;</button>
             </div>
-            <form method="post" action="/ignored-songs" class="ignore-song-form" data-ignore-form data-playlist-name="<?= $escape($playlist['name'] ?? '') ?>">
+            <form method="post" action="/admin/ignored-songs" class="ignore-song-form" data-ignore-form data-playlist-name="<?= $escape($playlist['name'] ?? '') ?>">
               <input type="hidden" name="_csrf" value="<?= $escape($csrf ?? '') ?>">
               <input type="hidden" name="song_id" value="<?= $escape($entry['song_id'] ?? '') ?>">
               <input type="hidden" name="playlist_id" value="<?= $escape($playlist['id'] ?? '') ?>">

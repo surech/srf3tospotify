@@ -117,8 +117,12 @@ final readonly class SpotifyClient implements SpotifyGateway
         return false;
     }
 
-    public function updatePlaylistVisibility(string $playlistId, bool $public): void
-    {
+    public function updatePlaylistDetails(
+        string $playlistId,
+        string $name,
+        string $description,
+        bool $public,
+    ): void {
         if ($playlistId === '') {
             throw new SpotifyException('Spotify playlist ID is required.');
         }
@@ -131,7 +135,11 @@ final readonly class SpotifyClient implements SpotifyGateway
                 'Accept' => 'application/json',
                 'Content-Type' => 'application/json',
             ],
-            json_encode(['public' => $public], JSON_THROW_ON_ERROR),
+            json_encode([
+                'name' => $name,
+                'description' => $description,
+                'public' => $public,
+            ], JSON_THROW_ON_ERROR),
         );
         $this->assertStatus($response, [200]);
     }

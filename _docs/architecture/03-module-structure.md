@@ -12,10 +12,10 @@ HTTP and CLI adapters call application services. Application services depend on 
 | `Application/Import` | Date-window import orchestration, schema checks, idempotent persistence | Domain, repository and SRF ports |
 | `Application/Ranking` | Aggregate plays into deterministic rankings | Domain, repository ports |
 | `Application/Spotify` | OAuth, matching review, ignored-song lifecycle, target selection and playlist synchronization orchestration | Domain, repositories, Spotify port |
-| `Infrastructure/Database` | PDO connection, transactions, migrations and repository implementations | Domain and application ports |
+| `Infrastructure/Database` | PDO connection, transactions, migrations, repositories and login-attempt throttling | Domain, application and web ports |
 | `Infrastructure/Http` | cURL transport, SRF client and Spotify client | Application ports |
 | `Infrastructure/Security` | Token encryption, session authentication and CSRF protection | PHP extensions, configuration |
-| `Web` | Routes, controllers, HTML views and error mapping | Application services |
+| `Web` | Public read-only and protected `/admin` routes, lazy sessions, CSRF, HTML views and error mapping | Application services |
 | `Cli` | Import, sync, migrate and cleanup commands | Application services |
 
 ## Planned Runtime Layout
@@ -46,3 +46,4 @@ vendor/               Composer production dependencies in release artifact
 - `PlaylistTargetService` combines the complete policy-specific airplay ranking with one exclusion snapshot.
 - `PlaylistTargetBuilder` walks candidates in ranking order until the configured target is full, skipping active exclusions, missing matches and duplicate Spotify track IDs.
 - `PlaylistSyncService` and `DefaultWebOperations` consume the same target service so the playlist page previews the next synchronization result.
+- `PlaylistRepository` reads the latest successful publication snapshot for the public homepage without calling Spotify.
